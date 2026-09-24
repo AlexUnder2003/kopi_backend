@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS user_tokens;
+DROP TABLE IF EXISTS users;
+DROP FUNCTION IF EXISTS update_updated_at();
+DROP EXTENSION IF EXISTS pgcrypto;
