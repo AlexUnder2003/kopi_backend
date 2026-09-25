@@ -75,14 +75,13 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			user, err = s.userRepo.Create(ctx, &models.User{Email: email})
-			if err != nil {
-				s.logger.Errorf("Failed to create user: %v", err)
-				return err
-			}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
 		}
-		return err
+		user, err = s.userRepo.Create(ctx, &models.User{Email: email})
+		if err != nil {
+			return err
+		}
 	}
 
 	otp, err := s.generateOTP()
