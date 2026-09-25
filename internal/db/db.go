@@ -2,11 +2,12 @@ package db
 
 import (
 	"KopiBackend/internal/config"
+	"KopiBackend/internal/migrations"
 	"database/sql"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 )
@@ -38,12 +39,13 @@ func RunMigrations(db *sql.DB, logger *zap.SugaredLogger) error {
 		return err
 	}
 
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://internal/migrations",
-		"postgres",
-		driver,
-	)
+	source, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		logger.Errorf("Failed to create migration source: %v", err)
+		return err
+	}
 
+	m, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
 	if err != nil {
 		logger.Errorf("Failed to create migration instance: %v", err)
 		return err

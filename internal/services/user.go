@@ -100,7 +100,7 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 	return nil
 }
 
-func (s *UserService) Login(ctx context.Context, email, otp string) (*dto.LoginResponse, error) {
+func (s *UserService) Login(ctx context.Context, otp string) (*dto.LoginResponse, error) {
 	userId, err := s.userRepo.GetUserIdByOTP(ctx, otp)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -125,6 +125,12 @@ func (s *UserService) Login(ctx context.Context, email, otp string) (*dto.LoginR
 	})
 	if err != nil {
 		s.logger.Errorf("Failed to create user token: %v", err)
+		return nil, err
+	}
+
+	err = s.userRepo.DeleteOTP(ctx, otp)
+	if err != nil {
+		s.logger.Errorf("Failed to delete OTP: %v", err)
 		return nil, err
 	}
 

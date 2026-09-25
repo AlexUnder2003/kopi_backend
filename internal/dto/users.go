@@ -23,8 +23,7 @@ type SendOTPRequest struct {
 }
 
 type LoginRequest struct {
-	Email string `json:"email"`
-	OTP   string `json:"otp"`
+	OTP string `json:"otp"`
 }
 
 type LoginResponse struct {

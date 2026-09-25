@@ -44,6 +44,16 @@ func (r *UserRepository) CreateOTP(ctx context.Context, userId uuid.UUID, otp st
 	return nil
 }
 
+func (r *UserRepository) DeleteOTP(ctx context.Context, otp string) error {
+	const q = `DELETE FROM user_otps WHERE otp = $1`
+
+	_, err := r.db.ExecContext(ctx, q, otp)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *UserRepository) GetUserIdByOTP(ctx context.Context, otp string) (uuid.UUID, error) {
 	const q = `SELECT user_id FROM user_otps WHERE otp = $1`
 

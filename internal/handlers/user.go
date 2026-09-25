@@ -49,11 +49,11 @@ func (h *UserHandler) Login(c *echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
-	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.OTP) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "email and otp are required")
+	if strings.TrimSpace(req.OTP) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "otp is required")
 	}
 
-	resp, err := h.userService.Login(c.Request().Context(), req.Email, req.OTP)
+	resp, err := h.userService.Login(c.Request().Context(), req.OTP)
 	if err != nil {
 		if err.Error() == "invalid OTP" {
 			return echo.NewHTTPError(http.StatusUnauthorized, "invalid otp")
