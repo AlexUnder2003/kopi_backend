@@ -1,0 +1,63 @@
+package app
+
+import (
+	"KopiBackend/internal/config"
+	"KopiBackend/internal/db"
+	"KopiBackend/internal/handlers"
+	"KopiBackend/internal/routes"
+	"KopiBackend/internal/services"
+
+	"database/sql"
+
+	"github.com/labstack/echo/v5"
+	"go.uber.org/zap"
+)
+
+type App struct {
+	config *config.AppConfig
+	router *echo.Echo
+	db     *sql.DB
+}
+
+func NewApp() *App {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+	sugaredLogger := logger.Sugar()
+
+	cfg, err := config.NewAppConfig(sugaredLogger)
+	if err != nil {
+		panic(err)
+	}
+
+	database, err := db.NewDB(cfg, sugaredLogger)
+	if err != nil {
+		panic(err)
+	}
+
+	userService := services.NewUserService(database, cfg, sugaredLogger)
+
+	hs := []routes.Handler{
+		handlers.NewUserHandler(userService),
+	}
+	router := routes.Router(hs)
+
+	return &App{config: cfg, router: router, db: database}
+}
+
+func (a *App) Run() {
+	addr := a.config.Address
+	if addr == "" {
+		addr = ":8080"
+	}
+	if err := a.router.Start(addr); err != nil {
+		panic(err)
+	}
+}
+
+func (a *App) Stop() {
+	if a.db != nil {
+		_ = a.db.Close()
+	}
+}

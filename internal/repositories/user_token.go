@@ -20,17 +20,17 @@ func NewUserTokenRepository(db *sql.DB) *UserTokenRepository {
 	return &UserTokenRepository{db: db}
 }
 
-func (r *UserTokenRepository) Create(ctx context.Context, token *models.UserToken) (*models.UserToken, error) {
+func (r *UserTokenRepository) Create(ctx context.Context, token *models.UserToken) error {
 	const q = `
 		INSERT INTO user_tokens (user_id, token_hash, expires_at)
-		VALUES ($1, $2, $3)
-		RETURNING ` + userTokenColumns
+		VALUES ($1, $2, $3)`
 
-	var created models.UserToken
-	if err := sqlscan.Get(ctx, r.db, &created, q, token.UserID, token.TokenHash, token.ExpiresAt); err != nil {
-		return nil, err
+	_, err := r.db.ExecContext(ctx, q, token.UserID, token.TokenHash, token.ExpiresAt)
+	if err != nil {
+		return err
 	}
-	return &created, nil
+
+	return nil
 }
 
 func (r *UserTokenRepository) GetByTokenHash(ctx context.Context, tokenHash string) (*models.UserToken, error) {
