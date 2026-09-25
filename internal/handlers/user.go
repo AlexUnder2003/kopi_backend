@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 
 	"KopiBackend/internal/dto"
+	"KopiBackend/internal/middleware"
 	"KopiBackend/internal/services"
+	"KopiBackend/internal/utils"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
 
@@ -25,7 +25,8 @@ func (h *UserHandler) Register(g *echo.Group) {
 	auth.POST("/login", h.Login)
 
 	users := g.Group("/users")
-	users.GET("/:id", h.GetByID)
+	users.Use(middleware.UserMiddleware)
+	users.GET("/me", h.GetMe)
 }
 
 func (h *UserHandler) SendOTP(c *echo.Context) error {
@@ -33,8 +34,8 @@ func (h *UserHandler) SendOTP(c *echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
-	if strings.TrimSpace(req.Email) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "email is required")
+	if err := req.Validate(); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	if err := h.userService.SendOTP(c.Request().Context(), req.Email); err != nil {
@@ -49,8 +50,8 @@ func (h *UserHandler) Login(c *echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
-	if strings.TrimSpace(req.OTP) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "otp is required")
+	if err := req.Validate(); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	resp, err := h.userService.Login(c.Request().Context(), req.OTP)
@@ -64,13 +65,14 @@ func (h *UserHandler) Login(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *UserHandler) GetByID(c *echo.Context) error {
-	id, err := uuid.Parse(c.Param("id"))
+func (h *UserHandler) GetMe(c *echo.Context) error {
+	userID, err := utils.GetUserIDFromContext(c)
+
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid user id")
+		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
 
-	resp, err := h.userService.GetByID(c.Request().Context(), id)
+	resp, err := h.userService.GetByID(c.Request().Context(), userID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user")
 	}

@@ -1,6 +1,10 @@
 package dto
 
 import (
+	"KopiBackend/internal/models"
+	"errors"
+	"slices"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
@@ -10,6 +14,19 @@ type AccountPost struct {
 	Currency string          `json:"currency"`
 	Icon     string          `json:"icon"`
 	Balance  decimal.Decimal `json:"balance"`
+}
+
+func (r *AccountPost) Validate() error {
+	if r.Name == "" {
+		return errors.New("name is required")
+	}
+	if r.Currency == "" {
+		return errors.New("currency is required")
+	}
+	if !slices.Contains(models.CurrencyCodes, models.CurrencyCode(r.Currency)) {
+		return errors.New("invalid currency")
+	}
+	return nil
 }
 
 type AccountUpdate struct {
@@ -30,4 +47,5 @@ type AccountResponse struct {
 	Currency string          `json:"currency" db:"currency"`
 	Icon     string          `json:"icon" db:"icon"`
 	Balance  decimal.Decimal `json:"balance" db:"balance"`
+	UserID   uuid.UUID       `json:"-" db:"user_id"`
 }

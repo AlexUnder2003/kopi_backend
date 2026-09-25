@@ -8,10 +8,14 @@ import (
 )
 
 type AppConfig struct {
-	Address     string
-	DatabaseURL string
-	SecretKey   string
-	SMTPAddress string
+	Address      string
+	DatabaseURL  string
+	SecretKey    string
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUser     string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 func NewAppConfig(logger *zap.SugaredLogger) (*AppConfig, error) {
@@ -23,9 +27,13 @@ func NewAppConfig(logger *zap.SugaredLogger) (*AppConfig, error) {
 	}
 
 	return &AppConfig{
-		Address:     os.Getenv("ADDRESS"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		SecretKey:   os.Getenv("SECRET_KEY"),
-		SMTPAddress: os.Getenv("SMTP_ADDRESS"),
+		Address:      os.Getenv("ADDRESS"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		SecretKey:    os.Getenv("SECRET_KEY"),
+		SMTPHost:     os.Getenv("SMTP_HOST"),
+		SMTPPort:     os.Getenv("SMTP_PORT"),
+		SMTPUser:     os.Getenv("SMTP_USER"),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:     os.Getenv("SMTP_FROM"),
 	}, nil
 }

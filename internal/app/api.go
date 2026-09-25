@@ -37,9 +37,11 @@ func NewApp() *App {
 	}
 
 	userService := services.NewUserService(database, cfg, sugaredLogger)
+	accountService := services.NewAccountService(database, sugaredLogger)
 
 	hs := []routes.Handler{
 		handlers.NewUserHandler(userService),
+		handlers.NewAccountHandler(accountService),
 	}
 	router := routes.Router(hs)
 

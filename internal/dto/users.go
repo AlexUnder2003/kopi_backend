@@ -1,11 +1,10 @@
 package dto
 
-import "github.com/google/uuid"
+import (
+	"errors"
 
-type UserPost struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
+	"github.com/google/uuid"
+)
 
 type UserUpdate struct {
 	Name  string `json:"name,omitempty"`
@@ -22,8 +21,22 @@ type SendOTPRequest struct {
 	Email string `json:"email"`
 }
 
+func (r *SendOTPRequest) Validate() error {
+	if r.Email == "" {
+		return errors.New("email is required")
+	}
+	return nil
+}
+
 type LoginRequest struct {
 	OTP string `json:"otp"`
+}
+
+func (r *LoginRequest) Validate() error {
+	if r.OTP == "" {
+		return errors.New("otp is required")
+	}
+	return nil
 }
 
 type LoginResponse struct {
@@ -33,4 +46,8 @@ type LoginResponse struct {
 
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshTokenResponse struct {
+	AccessToken string `json:"access_token"`
 }

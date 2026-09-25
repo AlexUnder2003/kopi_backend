@@ -54,14 +54,15 @@ func (r *UserRepository) DeleteOTP(ctx context.Context, otp string) error {
 	return nil
 }
 
-func (r *UserRepository) GetUserIdByOTP(ctx context.Context, otp string) (uuid.UUID, error) {
-	const q = `SELECT user_id FROM user_otps WHERE otp = $1`
+func (r *UserRepository) GetUserIdByOTP(ctx context.Context, otp string) (*models.UserOTP, error) {
+	const q = `SELECT user_id, expires_at FROM user_otps WHERE otp = $1`
 
-	var userId uuid.UUID
-	if err := sqlscan.Get(ctx, r.db, &userId, q, otp); err != nil {
-		return uuid.Nil, err
+	var row models.UserOTP
+	if err := sqlscan.Get(ctx, r.db, &row, q, otp); err != nil {
+		return nil, err
 	}
-	return userId, nil
+
+	return &row, nil
 }
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.UserResponse, error) {
