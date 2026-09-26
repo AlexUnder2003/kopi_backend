@@ -32,14 +32,14 @@ func (h *UserHandler) Register(g *echo.Group) {
 func (h *UserHandler) SendOTP(c *echo.Context) error {
 	var req dto.SendOTPRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	if err := h.userService.SendOTP(c.Request().Context(), req.Email); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to send otp")
+		return mapAppError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
@@ -48,7 +48,7 @@ func (h *UserHandler) SendOTP(c *echo.Context) error {
 func (h *UserHandler) Login(c *echo.Context) error {
 	var req dto.LoginRequest
 	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -56,10 +56,7 @@ func (h *UserHandler) Login(c *echo.Context) error {
 
 	resp, err := h.userService.Login(c.Request().Context(), req.OTP)
 	if err != nil {
-		if err.Error() == "invalid OTP" {
-			return echo.NewHTTPError(http.StatusUnauthorized, "invalid otp")
-		}
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to login")
+		return mapAppError(err)
 	}
 
 	return c.JSON(http.StatusOK, resp)
@@ -67,14 +64,13 @@ func (h *UserHandler) Login(c *echo.Context) error {
 
 func (h *UserHandler) GetMe(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
-
 	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
 	resp, err := h.userService.GetByID(c.Request().Context(), userID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user")
+		return mapAppError(err)
 	}
 
 	return c.JSON(http.StatusOK, resp)

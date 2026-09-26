@@ -4,7 +4,7 @@ CREATE TABLE budgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     amount NUMERIC(19, 4) NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id),
-    currency VARCHAR(3) NOT NULL,
+    currency currency_code NOT NULL,
     frequency budget_frequency NOT NULL,
     category_id UUID NOT NULL REFERENCES categories(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

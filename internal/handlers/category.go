@@ -13,46 +13,43 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-type AccountHandler struct {
-	accountService *services.AccountService
+type CategoryHandler struct {
+	categoryService *services.CategoryService
 }
 
-func NewAccountHandler(accountService *services.AccountService) *AccountHandler {
-	return &AccountHandler{accountService: accountService}
+func NewCategoryHandler(categoryService *services.CategoryService) *CategoryHandler {
+	return &CategoryHandler{categoryService: categoryService}
 }
 
-func (h *AccountHandler) Register(g *echo.Group) {
-	accounts := g.Group("/accounts")
-	accounts.Use(middleware.UserMiddleware)
+func (h *CategoryHandler) Register(g *echo.Group) {
+	categories := g.Group("/categories")
+	categories.Use(middleware.UserMiddleware)
 
-	accounts.POST("", h.Create)
-	accounts.GET("", h.List)
-	accounts.GET("/:id", h.GetByID)
-	accounts.PATCH("/:id", h.Update)
-	accounts.DELETE("/:id", h.Delete)
+	categories.POST("", h.Create)
+	categories.GET("", h.List)
+	categories.GET("/:id", h.GetByID)
+	categories.PATCH("/:id", h.Update)
+	categories.DELETE("/:id", h.Delete)
 }
 
-func (h *AccountHandler) Create(c *echo.Context) error {
+func (h *CategoryHandler) Create(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	var req dto.AccountPost
+	var req dto.CategoryPost
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
-
 	if err := req.Validate(); err != nil {
-		return mapAccountValidationErrors(err)
+		return mapCategoryValidationErrors(err)
 	}
 
-	resp, err := h.accountService.Create(c.Request().Context(), &models.Account{
-		Name:     req.Name,
-		Currency: models.CurrencyCode(req.Currency),
-		Icon:     req.Icon,
-		Balance:  req.Balance,
-		UserID:   userID,
+	resp, err := h.categoryService.Create(c.Request().Context(), &models.Category{
+		Name:   req.Name,
+		Icon:   req.Icon,
+		UserID: &userID,
 	})
 	if err != nil {
 		return mapAppError(err)
@@ -61,13 +58,13 @@ func (h *AccountHandler) Create(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
-func (h *AccountHandler) List(c *echo.Context) error {
+func (h *CategoryHandler) List(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.accountService.List(c.Request().Context(), userID)
+	resp, err := h.categoryService.List(c.Request().Context(), userID)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -75,9 +72,8 @@ func (h *AccountHandler) List(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *AccountHandler) GetByID(c *echo.Context) error {
-	userID, err := utils.GetUserIDFromContext(c)
-	if err != nil {
+func (h *CategoryHandler) GetByID(c *echo.Context) error {
+	if _, err := utils.GetUserIDFromContext(c); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -86,7 +82,7 @@ func (h *AccountHandler) GetByID(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	resp, err := h.accountService.GetByID(c.Request().Context(), id, userID)
+	resp, err := h.categoryService.GetByID(c.Request().Context(), id)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -94,9 +90,8 @@ func (h *AccountHandler) GetByID(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *AccountHandler) Update(c *echo.Context) error {
-	userID, err := utils.GetUserIDFromContext(c)
-	if err != nil {
+func (h *CategoryHandler) Update(c *echo.Context) error {
+	if _, err := utils.GetUserIDFromContext(c); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -105,12 +100,12 @@ func (h *AccountHandler) Update(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	var req dto.AccountUpdate
+	var req dto.CategoryUpdate
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 
-	resp, err := h.accountService.Update(c.Request().Context(), userID, &models.Account{
+	resp, err := h.categoryService.Update(c.Request().Context(), &models.Category{
 		ID:   id,
 		Name: req.Name,
 		Icon: req.Icon,
@@ -122,9 +117,8 @@ func (h *AccountHandler) Update(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *AccountHandler) Delete(c *echo.Context) error {
-	userID, err := utils.GetUserIDFromContext(c)
-	if err != nil {
+func (h *CategoryHandler) Delete(c *echo.Context) error {
+	if _, err := utils.GetUserIDFromContext(c); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -133,19 +127,16 @@ func (h *AccountHandler) Delete(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	if err := h.accountService.Delete(c.Request().Context(), id, userID); err != nil {
+	if err := h.categoryService.Delete(c.Request().Context(), id); err != nil {
 		return mapAppError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-func mapAccountValidationErrors(err error) error {
+func mapCategoryValidationErrors(err error) error {
 	if err.Error() == "name" {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_name")
-	}
-	if err.Error() == "currency" {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_currency")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_category_name")
 	}
 	return err
 }

@@ -1,10 +1,21 @@
 package dto
 
-import "github.com/google/uuid"
+import (
+	"errors"
+
+	"github.com/google/uuid"
+)
 
 type CategoryPost struct {
 	Name string `json:"name"`
 	Icon string `json:"icon"`
+}
+
+func (r *CategoryPost) Validate() error {
+	if r.Name == "" {
+		return errors.New("name")
+	}
+	return nil
 }
 
 type CategoryUpdate struct {

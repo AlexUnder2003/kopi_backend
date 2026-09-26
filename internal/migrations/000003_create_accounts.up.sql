@@ -1,7 +1,9 @@
+CREATE TYPE currency_code AS ENUM ('USD', 'EUR', 'RUB', 'KZT', 'BYN');
+
 CREATE TABLE accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
-    currency VARCHAR(3) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
+    currency currency_code NOT NULL,
     icon VARCHAR(255) NOT NULL,
     balance NUMERIC(19, 4) NOT NULL DEFAULT 0,
     user_id UUID NOT NULL REFERENCES users(id),

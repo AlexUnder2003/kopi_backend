@@ -18,13 +18,13 @@ type AccountPost struct {
 
 func (r *AccountPost) Validate() error {
 	if r.Name == "" {
-		return errors.New("name is required")
+		return errors.New("name")
 	}
 	if r.Currency == "" {
-		return errors.New("currency is required")
+		return errors.New("currency")
 	}
 	if !slices.Contains(models.CurrencyCodes, models.CurrencyCode(r.Currency)) {
-		return errors.New("invalid currency")
+		return errors.New("currency")
 	}
 	return nil
 }
