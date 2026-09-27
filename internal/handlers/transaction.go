@@ -38,8 +38,7 @@ func (h *TransactionHandler) Register(g *echo.Group) {
 }
 
 func (h *TransactionHandler) Create(c *echo.Context) error {
-	userID, err := utils.GetUserIDFromContext(c)
-	if err != nil {
+	if _, err := utils.GetUserIDFromContext(c); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -51,11 +50,12 @@ func (h *TransactionHandler) Create(c *echo.Context) error {
 		return mapTransactionValidationErrors(err)
 	}
 
-	resp, err := h.transactionService.Create(c.Request().Context(), userID, &models.Transaction{
+	resp, err := h.transactionService.Create(c.Request().Context(), &models.Transaction{
 		Name:           req.Name,
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
+		FromAccountID:  req.FromAccountID,
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -64,42 +64,6 @@ func (h *TransactionHandler) Create(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, resp)
-}
-
-func (h *TransactionHandler) CreateTransfer(c *echo.Context) error {
-	userID, err := utils.GetUserIDFromContext(c)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
-	}
-
-	var req dto.TransactionTransferPost
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
-	}
-
-	fromTx := &models.Transaction{
-		Name:           req.Name,
-		Amount:         req.Amount,
-		Type:           models.TransactionTypeTransferOut,
-		AccountID:      req.FromAccountID,
-		OccurrenceDate: req.OccurrenceDate,
-	}
-
-	toTx := &models.Transaction{
-		Name:           req.Name,
-		Amount:         req.Amount,
-		Type:           models.TransactionTypeTransferIn,
-		AccountID:      req.ToAccountID,
-		OccurrenceDate: req.OccurrenceDate,
-	}
-
-	response, err := h.transactionService.CreateTransfer(c.Request().Context(), userID, fromTx, toTx)
-
-	if err != nil {
-		return mapAppError(err)
-	}
-
-	return c.JSON(http.StatusCreated, response)
 }
 
 func (h *TransactionHandler) List(c *echo.Context) error {
@@ -165,6 +129,7 @@ func (h *TransactionHandler) Update(c *echo.Context) error {
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
+		FromAccountID:  req.FromAccountID,
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -265,6 +230,8 @@ func mapTransactionValidationErrors(err error) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_type")
 	case "occurrence_date":
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_occurrence_date")
+	case "from_account_id":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_from_account_id")
 	default:
 		return err
 	}

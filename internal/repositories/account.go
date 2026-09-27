@@ -9,6 +9,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/sqlscan"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 type AccountRepository struct {
@@ -75,6 +76,22 @@ func (r *AccountRepository) Update(ctx context.Context, account *models.Account)
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (r *AccountRepository) UpdateBalance(ctx context.Context, accountID uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	const q = `
+		UPDATE accounts
+		SET balance = balance + $2
+		WHERE id = $1
+		RETURNING balance`
+
+	var balance decimal.Decimal
+	if err := sqlscan.Get(
+		ctx, DBorTx(r.db, tx), &balance, q, accountID, delta,
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *AccountRepository) Delete(ctx context.Context, id uuid.UUID) error {

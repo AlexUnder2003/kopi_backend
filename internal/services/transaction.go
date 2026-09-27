@@ -11,17 +11,16 @@ import (
 	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 const errMsgTransactionNotFound = "not_found_transaction"
-const errMsgSameTransfer = "bad_request_not_same_transfer"
 
 type TransactionService struct {
 	db              *sql.DB
 	transactionRepo *repositories.TransactionRepository
 	accountRepo     *repositories.AccountRepository
-	categoryRepo    *repositories.CategoryRepository
 	logger          *zap.SugaredLogger
 }
 
@@ -30,128 +29,72 @@ func NewTransactionService(db *sql.DB, logger *zap.SugaredLogger) *TransactionSe
 		db:              db,
 		transactionRepo: repositories.NewTransactionRepository(db),
 		accountRepo:     repositories.NewAccountRepository(db),
-		categoryRepo:    repositories.NewCategoryRepository(db),
 		logger:          logger,
 	}
 }
 
-func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (*dto.TransactionResponse, error) {
-	acc, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
+func (s *TransactionService) Create(ctx context.Context, transaction *models.Transaction) (any, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
 	}
+	defer tx.Rollback()
 
-	if acc.UserID != userID {
-		return nil, apperrors.NotFound(errMsgAccountNotFound)
-	}
-
-	created, err := s.transactionRepo.Create(ctx, transaction, nil)
+	created, err := s.transactionRepo.Create(ctx, transaction, tx)
 	if err != nil {
 		s.logger.Errorw("failed to create transaction", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	return created, nil
-}
-
-func (s *TransactionService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto.TransactionResponse, error) {
-	transaction, err := s.transactionRepo.GetByID(ctx, id, userID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.NotFound(errMsgTransactionNotFound)
-		}
-		s.logger.Errorw("failed to get transaction", "error", err)
-		return nil, apperrors.Internal(errInternalServerError)
-	}
-
-	return transaction, nil
-}
-
-func (s *TransactionService) CreateTransfer(ctx context.Context, userID uuid.UUID, from *models.Transaction, to *models.Transaction) ([]dto.TransactionResponse, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	transferCategoryID, err := s.categoryRepo.GetTransferCategoryID(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	transactionUUID := uuid.New()
-
-	from.CategoryID = transferCategoryID
-	to.CategoryID = transferCategoryID
-	from.TransferID = &transactionUUID
-	to.TransferID = &transactionUUID
-
-	accounts, err := s.accountRepo.List(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	count := 0
-	for _, account := range accounts {
-		if account.ID == from.AccountID {
-			count++
-		}
-		if account.ID == to.AccountID {
-			count++
-		}
-	}
-
-	if count != 2 {
-		return nil, apperrors.NotFound(errMsgAccountNotFound)
-	}
-
-	fromTx, err := s.transactionRepo.Create(ctx, from, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	toTx, err := s.transactionRepo.Create(ctx, to, tx)
-	if err != nil {
+	if err := s.applyEffects(ctx, tx, transaction.Type, transaction.AccountID, transaction.FromAccountID, transaction.Amount); err != nil {
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	response := make([]dto.TransactionResponse, 2)
-	response[0] = *fromTx
-	response[1] = *toTx
-
-	return response, nil
+	return created.Response(), nil
 }
 
-func (s *TransactionService) List(ctx context.Context, userID uuid.UUID, params repositories.TransactionListParams) ([]dto.TransactionResponse, error) {
+func (s *TransactionService) GetByID(ctx context.Context, id, userID uuid.UUID) (any, error) {
+	transaction, err := s.get(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	return transaction.Response(), nil
+}
+
+func (s *TransactionService) List(ctx context.Context, userID uuid.UUID, params repositories.TransactionListParams) ([]any, error) {
 	transactions, err := s.transactionRepo.List(ctx, params, userID)
 	if err != nil {
 		s.logger.Errorw("failed to list transactions", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
-	return transactions, nil
+
+	response := make([]any, len(transactions))
+	for i, transaction := range transactions {
+		response[i] = transaction.Response()
+	}
+	return response, nil
 }
 
-func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (*dto.TransactionResponse, error) {
-	_, err := s.GetByID(ctx, transaction.ID, userID)
+func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (any, error) {
+	existing, err := s.get(ctx, transaction.ID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if transaction.AccountID != uuid.Nil {
-		acc, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
-		if err != nil {
-			return nil, err
-		}
-		if acc.UserID != userID {
-			return nil, apperrors.NotFound(errMsgAccountNotFound)
-		}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
 	}
+	defer tx.Rollback()
 
-	updated, err := s.transactionRepo.Update(ctx, transaction, nil)
+	updated, err := s.transactionRepo.Update(ctx, transaction, tx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperrors.NotFound(errMsgTransactionNotFound)
@@ -160,17 +103,85 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	return updated, nil
+	if !transaction.Amount.IsZero() {
+		if err := s.applyEffects(ctx, tx, existing.Type, existing.Account.ID, existing.FromAccount.ID, transaction.Amount.Sub(existing.Amount)); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	return updated.Response(), nil
 }
 
 func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) error {
-	if _, err := s.GetByID(ctx, id, userID); err != nil {
+	transaction, err := s.get(ctx, id, userID)
+	if err != nil {
 		return err
 	}
 
-	if err := s.transactionRepo.Delete(ctx, id); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	if err := s.transactionRepo.Delete(ctx, id, tx); err != nil {
 		s.logger.Errorw("failed to delete transaction", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
+
+	if err := s.applyEffects(ctx, tx, transaction.Type, transaction.Account.ID, transaction.FromAccount.ID, transaction.Amount.Neg()); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
 	return nil
+}
+
+func (s *TransactionService) get(ctx context.Context, id, userID uuid.UUID) (*dto.TransactionResponseTransfer, error) {
+	transaction, err := s.transactionRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, apperrors.NotFound(errMsgTransactionNotFound)
+		}
+		s.logger.Errorw("failed to get transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+	return transaction, nil
+}
+
+func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txType models.TransactionType, accountID, fromAccountID uuid.UUID, amount decimal.Decimal) error {
+	switch txType {
+	case models.TransactionTypeTransfer:
+		if err := s.accountRepo.UpdateBalance(ctx, accountID, amount, tx); err != nil {
+			s.logger.Errorw("failed to update account balance", "error", err)
+			return apperrors.Internal(errInternalServerError)
+		}
+		if err := s.accountRepo.UpdateBalance(ctx, fromAccountID, amount.Neg(), tx); err != nil {
+			s.logger.Errorw("failed to update account balance", "error", err)
+			return apperrors.Internal(errInternalServerError)
+		}
+	default:
+		if err := s.accountRepo.UpdateBalance(ctx, accountID, signed(txType, amount), tx); err != nil {
+			s.logger.Errorw("failed to update account balance", "error", err)
+			return apperrors.Internal(errInternalServerError)
+		}
+	}
+	return nil
+}
+
+func signed(txType models.TransactionType, amount decimal.Decimal) decimal.Decimal {
+	if txType == models.TransactionTypeExpense {
+		return amount.Neg()
+	}
+	return amount
 }

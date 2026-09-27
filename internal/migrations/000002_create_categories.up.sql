@@ -21,7 +21,7 @@ INSERT INTO categories (name, icon) VALUES
     ('Путешествия', 'airplane-tilt'),
     ('Подарки', 'gift'),
     ('Покупки', 'shopping-cart'),
-    ('Другое', 'package');
+    ('Другое', 'package'),
     ('Переводы', 'transfer');
 CREATE INDEX idx_categories_user_id ON categories(user_id);
 CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories FOR EACH ROW EXECUTE FUNCTION update_updated_at();

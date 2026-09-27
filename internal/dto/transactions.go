@@ -23,6 +23,9 @@ func (r *TransactionPost) Validate() error {
 	if r.OccurrenceDate.IsZero() {
 		return errors.New("occurrence_date")
 	}
+	if r.Type == models.TransactionTypeTransfer && (r.FromAccountID == uuid.Nil || r.FromAccountID == r.AccountID) {
+		return errors.New("from_account_id")
+	}
 	return nil
 }
 
@@ -33,12 +36,15 @@ func (r *TransactionUpdate) Validate() error {
 	if r.Amount.IsNegative() {
 		return errors.New("amount")
 	}
+	if r.FromAccountID != uuid.Nil && r.AccountID != uuid.Nil && r.FromAccountID == r.AccountID {
+		return errors.New("from_account_id")
+	}
 	return nil
 }
 
 func validTransactionType(txType models.TransactionType) bool {
 	switch txType {
-	case models.TransactionTypeIncome, models.TransactionTypeExpense, models.TransactionTypeTransferIn, models.TransactionTypeTransferOut:
+	case models.TransactionTypeIncome, models.TransactionTypeExpense, models.TransactionTypeTransfer:
 		return true
 	default:
 		return false
@@ -50,16 +56,9 @@ type TransactionPost struct {
 	Amount         decimal.Decimal        `json:"amount"`
 	Type           models.TransactionType `json:"type"`
 	AccountID      uuid.UUID              `json:"account_id,omitempty"`
+	FromAccountID  uuid.UUID              `json:"from_account_id,omitempty"`
 	CategoryID     uuid.UUID              `json:"category_id"`
 	OccurrenceDate time.Time              `json:"occurrence_date"`
-}
-
-type TransactionTransferPost struct {
-	Name           string          `json:"name"`
-	Amount         decimal.Decimal `json:"amount"`
-	FromAccountID  uuid.UUID       `json:"from_account_id"`
-	ToAccountID    uuid.UUID       `json:"to_account_id"`
-	OccurrenceDate time.Time       `json:"occurrence_date"`
 }
 
 type TransactionUpdate struct {
@@ -67,16 +66,9 @@ type TransactionUpdate struct {
 	Amount         decimal.Decimal        `json:"amount,omitempty"`
 	Type           models.TransactionType `json:"type,omitempty"`
 	AccountID      uuid.UUID              `json:"account_id,omitempty"`
+	FromAccountID  uuid.UUID              `json:"from_account_id,omitempty"`
 	CategoryID     uuid.UUID              `json:"category_id,omitempty"`
 	OccurrenceDate time.Time              `json:"occurrence_date,omitempty"`
-}
-
-type TransactionTransferUpdate struct {
-	Name           string          `json:"name,omitempty"`
-	Amount         decimal.Decimal `json:"amount,omitempty"`
-	FromAccountID  uuid.UUID       `json:"from_account_id"`
-	ToAccountID    uuid.UUID       `json:"to_account_id"`
-	OccurrenceDate time.Time       `json:"occurrence_date,omitempty"`
 }
 
 type TransactionResponse struct {
@@ -85,8 +77,18 @@ type TransactionResponse struct {
 	Amount         decimal.Decimal        `json:"amount" db:"amount"`
 	Type           models.TransactionType `json:"type" db:"type"`
 	Account        AccountResponseShort   `json:"account,omitempty" db:"account"`
-	FromAccount    AccountResponseShort   `json:"from_account,omitempty" db:"-"`
-	ToAccount      AccountResponseShort   `json:"to_account,omitempty" db:"-"`
 	Category       CategoryResponse       `json:"category" db:"category"`
 	OccurrenceDate time.Time              `json:"occurrence_date" db:"occurrence_date"`
+}
+
+type TransactionResponseTransfer struct {
+	TransactionResponse
+	FromAccount AccountResponseShort `json:"from_account" db:"from_account"`
+}
+
+func (r TransactionResponseTransfer) Response() any {
+	if r.Type == models.TransactionTypeTransfer {
+		return r
+	}
+	return r.TransactionResponse
 }
