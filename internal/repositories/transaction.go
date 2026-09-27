@@ -31,6 +31,8 @@ type TransactionListParams struct {
 	CategoryID uuid.UUID
 	StartDate  time.Time
 	EndDate    time.Time
+	Limit      int
+	Offset     int
 }
 
 type TransactionRepository struct {
@@ -41,11 +43,11 @@ func NewTransactionRepository(db *sql.DB) *TransactionRepository {
 	return &TransactionRepository{db: db}
 }
 
-func (r *TransactionRepository) Create(ctx context.Context, tx *models.Transaction) (*dto.TransactionResponse, error) {
+func (r *TransactionRepository) Create(ctx context.Context, txModel *models.Transaction, tx *sql.Tx) (*dto.TransactionResponse, error) {
 	const q = `
 		WITH inserted AS (
-			INSERT INTO transactions (name, type, account_id, category_id, amount, occurrence_date)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO transactions (name, type, account_id, category_id, amount, occurrence_date, transfer_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING id, name, type, account_id, category_id, amount, occurrence_date
 		)
 		SELECT ` + transactionSelectColumns + `
@@ -55,71 +57,77 @@ func (r *TransactionRepository) Create(ctx context.Context, tx *models.Transacti
 
 	var resp dto.TransactionResponse
 	if err := sqlscan.Get(
-		ctx, r.db, &resp, q,
-		tx.Name, tx.Type, tx.AccountID, tx.CategoryID, tx.Amount, tx.OccurrenceDate,
+		ctx, DBorTx(r.db, tx), &resp, q,
+		txModel.Name, txModel.Type, txModel.AccountID, txModel.CategoryID, txModel.Amount, txModel.OccurrenceDate, txModel.TransferID,
 	); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func (r *TransactionRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.TransactionResponse, error) {
+func (r *TransactionRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto.TransactionResponse, error) {
 	const q = `
 		SELECT ` + transactionSelectColumns + `
 		FROM transactions t
 		JOIN accounts a ON a.id = t.account_id
 		JOIN categories c ON c.id = t.category_id
-		WHERE t.id = $1`
+		WHERE t.id = $1 AND a.user_id = $2`
 
 	var resp dto.TransactionResponse
-	if err := sqlscan.Get(ctx, r.db, &resp, q, id); err != nil {
+	if err := sqlscan.Get(ctx, r.db, &resp, q, id, userID); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
-func (r *TransactionRepository) List(ctx context.Context, params TransactionListParams) ([]dto.TransactionResponse, error) {
-	const q = `
-		SELECT ` + transactionSelectColumns + `
-		FROM transactions t
-		JOIN accounts a ON a.id = t.account_id
-		JOIN categories c ON c.id = t.category_id
-		WHERE (t.account_id = $1 OR $1 IS NULL)
-		  AND (t.category_id = $2 OR $2 IS NULL)
-		  AND (t.occurrence_date >= $3 OR $3 IS NULL)
-		  AND (t.occurrence_date <= $4 OR $4 IS NULL)
-		ORDER BY t.occurrence_date DESC`
-
-	var resp []dto.TransactionResponse
-	if err := sqlscan.Select(
-		ctx, r.db, &resp, q,
-		nullUUID(params.AccountID),
-		nullUUID(params.CategoryID),
-		nullTime(params.StartDate),
-		nullTime(params.EndDate),
-	); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-func (r *TransactionRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]dto.TransactionResponse, error) {
+func (r *TransactionRepository) List(ctx context.Context, params TransactionListParams, userID uuid.UUID) ([]dto.TransactionResponse, error) {
 	const q = `
 		SELECT ` + transactionSelectColumns + `
 		FROM transactions t
 		JOIN accounts a ON a.id = t.account_id
 		JOIN categories c ON c.id = t.category_id
 		WHERE a.user_id = $1
-		ORDER BY t.occurrence_date DESC`
+			AND (t.account_id = $2 OR $2 IS NULL)
+			AND (t.category_id = $3 OR $3 IS NULL)
+			AND (t.occurrence_date >= $4 OR $4 IS NULL)
+			AND (t.occurrence_date <= $5 OR $5 IS NULL)
+		ORDER BY t.occurrence_date DESC
+		LIMIT $6 OFFSET $7`
 
 	var resp []dto.TransactionResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, userID); err != nil {
+	if err := sqlscan.Select(
+		ctx, r.db, &resp, q,
+		userID,
+		nullUUID(params.AccountID),
+		nullUUID(params.CategoryID),
+		nullTime(params.StartDate),
+		nullTime(params.EndDate),
+		params.Limit,
+		params.Offset,
+	); err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (r *TransactionRepository) Update(ctx context.Context, tx *models.Transaction) (*dto.TransactionResponse, error) {
+func (r *TransactionRepository) GetByTransferID(ctx context.Context, transferID uuid.UUID, userID uuid.UUID) ([]dto.TransactionResponse, error) {
+	const q = `
+		SELECT ` + transactionSelectColumns + `
+		FROM transactions t
+		JOIN accounts a ON a.id = t.account_id
+		JOIN categories c ON c.id = t.category_id
+		WHERE t.transfer_id = $1
+			AND a.user_id = $2
+		ORDER BY t.occurrence_date DESC`
+
+	var resp []dto.TransactionResponse
+	if err := sqlscan.Select(ctx, r.db, &resp, q, transferID, userID); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (r *TransactionRepository) Update(ctx context.Context, txModel *models.Transaction, tx *sql.Tx) (*dto.TransactionResponse, error) {
 	const q = `
 		WITH updated AS (
 			UPDATE transactions
@@ -139,14 +147,14 @@ func (r *TransactionRepository) Update(ctx context.Context, tx *models.Transacti
 
 	var resp dto.TransactionResponse
 	if err := sqlscan.Get(
-		ctx, r.db, &resp, q,
-		tx.ID,
-		nullString(tx.Name),
-		nullString(string(tx.Type)),
-		nullUUID(tx.AccountID),
-		nullUUID(tx.CategoryID),
-		nullDecimal(tx.Amount),
-		nullTime(tx.OccurrenceDate),
+		ctx, DBorTx(r.db, tx), &resp, q,
+		txModel.ID,
+		nullString(txModel.Name),
+		nullString(string(txModel.Type)),
+		nullUUID(txModel.AccountID),
+		nullUUID(txModel.CategoryID),
+		nullDecimal(txModel.Amount),
+		nullTime(txModel.OccurrenceDate),
 	); err != nil {
 		return nil, err
 	}

@@ -1,11 +1,25 @@
 package repositories
 
 import (
+	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
+
+type executor interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func DBorTx(db *sql.DB, tx *sql.Tx) executor {
+	if tx != nil {
+		return tx
+	}
+	return db
+}
 
 func nullString(s string) any {
 	if s == "" {

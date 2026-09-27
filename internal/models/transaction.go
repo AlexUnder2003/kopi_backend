@@ -24,4 +24,5 @@ type Transaction struct {
 	CategoryID     uuid.UUID       `db:"category_id"`
 	Amount         decimal.Decimal `db:"amount"`
 	OccurrenceDate time.Time       `db:"occurrence_date"`
+	TransferID     *uuid.UUID      `db:"transfer_id"`
 }

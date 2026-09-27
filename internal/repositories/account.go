@@ -9,7 +9,6 @@ import (
 
 	"github.com/georgysavva/scany/v2/sqlscan"
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 )
 
 type AccountRepository struct {
@@ -37,7 +36,7 @@ func (r *AccountRepository) Create(ctx context.Context, account *models.Account)
 }
 
 func (r *AccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.AccountResponse, error) {
-	const q = `SELECT id, name, currency, icon, balance, user_id FROM accounts WHERE id = $1`
+	q := `SELECT id, name, currency, icon, balance, user_id FROM accounts WHERE id = $1`
 
 	var resp dto.AccountResponse
 	if err := sqlscan.Get(ctx, r.db, &resp, q, id); err != nil {
@@ -66,27 +65,13 @@ func (r *AccountRepository) Update(ctx context.Context, account *models.Account)
 		SET name = COALESCE($2, name),
 		    icon = COALESCE($3, icon)
 		WHERE id = $1
-		RETURNING id, name, currency, icon, balance, user_id`
+		RETURNING id, name, currency, icon, user_id`
 
 	var resp dto.AccountResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
 		account.ID, nullString(account.Name), nullString(account.Icon),
 	); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-func (r *AccountRepository) AdjustBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal) (*dto.AccountResponse, error) {
-	const q = `
-		UPDATE accounts
-		SET balance = balance + $2
-		WHERE id = $1
-		RETURNING id, name, currency, icon, balance, user_id`
-
-	var resp dto.AccountResponse
-	if err := sqlscan.Get(ctx, r.db, &resp, q, id, delta); err != nil {
 		return nil, err
 	}
 	return &resp, nil
