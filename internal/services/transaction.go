@@ -86,29 +86,22 @@ func (s *TransactionService) CreateTransfer(ctx context.Context, userID uuid.UUI
 	from.TransferID = &transactionUUID
 	to.TransferID = &transactionUUID
 
-	fromAcc, err := s.accountRepo.GetByID(ctx, from.AccountID)
+	accounts, err := s.accountRepo.List(ctx, userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.NotFound(errMsgAccountNotFound)
-		}
-		s.logger.Errorw("failed to get from account", "error", err)
 		return nil, err
 	}
 
-	if fromAcc.UserID != userID {
-		return nil, apperrors.NotFound(errMsgAccountNotFound)
-	}
-
-	toAcc, err := s.accountRepo.GetByID(ctx, to.AccountID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.NotFound(errMsgAccountNotFound)
+	count := 0
+	for _, account := range accounts {
+		if account.ID == from.AccountID {
+			count++
 		}
-		s.logger.Errorw("failed to get to account", "error", err)
-		return nil, err
+		if account.ID == to.AccountID {
+			count++
+		}
 	}
 
-	if toAcc.UserID != userID {
+	if count != 2 {
 		return nil, apperrors.NotFound(errMsgAccountNotFound)
 	}
 
