@@ -35,11 +35,17 @@ func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.
 }
 
 func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dto.BudgetPost) (*dto.BudgetResponse, error) {
+	if budget.IntervalType != models.IntervalTypeCustom {
+		budget.StartDate = s.CalculateStartDate()
+	}
+
 	budgetModel := &models.Budget{
+		Name:         budget.Name,
 		UserID:       userID,
 		Amount:       budget.Amount,
 		IntervalType: budget.IntervalType,
 		Interval:     budget.Interval,
+		StartDate:    budget.StartDate,
 		ResetDate:    s.CalculateResetDate(ctx, budget.StartDate, budget.IntervalType, budget.Interval),
 		Currency:     budget.Currency,
 		CategoryID:   budget.CategoryID,
@@ -77,8 +83,8 @@ func (s *BudgetService) List(ctx context.Context, userID uuid.UUID) ([]dto.Budge
 	return budgets, nil
 }
 
-func (s *BudgetService) Update(ctx context.Context, userID uuid.UUID, budget *models.Budget) (*dto.BudgetResponse, error) {
-	existingBudget, err := s.budgetRepo.GetByID(ctx, budget.ID, userID)
+func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget *dto.BudgetUpdate) (*dto.BudgetResponse, error) {
+	existingBudget, err := s.budgetRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperrors.NotFound(errMsgBudgetNotFound)
@@ -87,11 +93,25 @@ func (s *BudgetService) Update(ctx context.Context, userID uuid.UUID, budget *mo
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	if budget.IntervalType != existingBudget.IntervalType {
-		budget.ResetDate = s.CalculateResetDate(ctx, budget.StartDate, budget.IntervalType, budget.Interval)
+	budgetModel := &models.Budget{
+		ID:     existingBudget.ID,
+		Name:   budget.Name,
+		Amount: budget.Amount,
 	}
 
-	updated, err := s.budgetRepo.Update(ctx, budget)
+	if budget.IntervalType != existingBudget.IntervalType || budget.IntervalType == models.IntervalTypeCustom {
+		if budget.IntervalType == models.IntervalTypeCustom {
+			budgetModel.StartDate = budget.StartDate
+			budgetModel.Interval = budget.Interval
+		} else {
+			budgetModel.StartDate = s.CalculateStartDate()
+		}
+
+		budgetModel.IntervalType = budget.IntervalType
+		budgetModel.ResetDate = s.CalculateResetDate(ctx, budgetModel.StartDate, budget.IntervalType, budgetModel.Interval)
+	}
+
+	updated, err := s.budgetRepo.Update(ctx, budgetModel)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperrors.NotFound(errMsgBudgetNotFound)
@@ -118,6 +138,8 @@ func (s *BudgetService) Delete(ctx context.Context, id, userID uuid.UUID) error 
 func (s *BudgetService) CalculateResetDate(ctx context.Context, date time.Time, intervalType models.IntervalType, interval int) time.Time {
 	var resetDate time.Time
 
+	now := time.Now()
+
 	for {
 		switch intervalType {
 		case models.IntervalTypeDaily:
@@ -131,9 +153,16 @@ func (s *BudgetService) CalculateResetDate(ctx context.Context, date time.Time, 
 		case models.IntervalTypeCustom:
 			resetDate = date.AddDate(0, 0, interval)
 		}
-		if resetDate.After(date) {
+		if resetDate.After(now) {
 			return resetDate
 		}
 		date = resetDate
 	}
+}
+
+func (s *BudgetService) CalculateStartDate() time.Time {
+	now := time.Now()
+	firstDayOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	return firstDayOfMonth
 }

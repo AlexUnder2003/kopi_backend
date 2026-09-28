@@ -2,8 +2,9 @@ CREATE TYPE interval_type AS ENUM ('daily', 'weekly', 'biweekly', 'monthly', 'cu
 
 CREATE TABLE budgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
     amount NUMERIC(19, 4) NOT NULL,
-    balance NUMERIC(19, 4) NOT NULL DEFAULT amount,
+    balance NUMERIC(19, 4) NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id),
     category_id UUID NOT NULL REFERENCES categories(id),
 

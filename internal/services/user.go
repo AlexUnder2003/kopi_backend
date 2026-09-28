@@ -48,7 +48,7 @@ func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.Sugared
 func (s *UserService) generateJWTTokens(userId uuid.UUID) (string, string, error) {
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userId,
-		"exp": time.Now().Add(15 * time.Minute).Unix(),
+		"exp": time.Now().Add(60 * time.Minute).Unix(),
 	}).SignedString([]byte(s.appConfig.SecretKey))
 	if err != nil {
 		s.logger.Errorw("failed to create access token", "error", err)

@@ -19,12 +19,14 @@ const (
 
 type Budget struct {
 	ID           uuid.UUID       `db:"id"`
+	Name         string          `db:"name"`
 	Amount       decimal.Decimal `db:"amount"`
 	Balance      decimal.Decimal `db:"balance"`
 	UserID       uuid.UUID       `db:"user_id"`
 	Currency     string          `db:"currency"`
 	IntervalType IntervalType    `db:"interval_type"`
 	Interval     int             `db:"interval"`
+	StartDate    time.Time       `db:"start_date"`
 	ResetDate    time.Time       `db:"reset_date"`
 	CategoryID   uuid.UUID       `db:"category_id"`
 }

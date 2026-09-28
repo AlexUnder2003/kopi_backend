@@ -1,9 +1,7 @@
 package dto
 
 import (
-	"KopiBackend/internal/models"
 	"errors"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -23,7 +21,7 @@ func (r *AccountPost) Validate() error {
 	if r.Currency == "" {
 		return errors.New("currency")
 	}
-	if !slices.Contains(models.CurrencyCodes, models.CurrencyCode(r.Currency)) {
+	if !validCurrency(r.Currency) {
 		return errors.New("currency")
 	}
 	return nil

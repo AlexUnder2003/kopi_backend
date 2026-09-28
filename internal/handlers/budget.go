@@ -5,7 +5,6 @@ import (
 
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/middleware"
-	"KopiBackend/internal/models"
 	"KopiBackend/internal/services"
 	"KopiBackend/internal/utils"
 
@@ -46,14 +45,7 @@ func (h *BudgetHandler) Create(c *echo.Context) error {
 		return mapBudgetValidationErrors(err)
 	}
 
-	resp, err := h.budgetService.Create(c.Request().Context(), &models.Budget{
-		Amount:       req.Amount,
-		UserID:       userID,
-		Currency:     req.Currency,
-		IntervalType: req.IntervalType,
-		Interval:     req.Interval,
-		CategoryID:   req.CategoryID,
-	})
+	resp, err := h.budgetService.Create(c.Request().Context(), userID, &req)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -113,13 +105,7 @@ func (h *BudgetHandler) Update(c *echo.Context) error {
 		return mapBudgetValidationErrors(err)
 	}
 
-	resp, err := h.budgetService.Update(c.Request().Context(), userID, &models.Budget{
-		ID:           id,
-		Amount:       req.Amount,
-		Currency:     req.Currency,
-		IntervalType: req.IntervalType,
-		Interval:     req.Interval,
-	})
+	resp, err := h.budgetService.Update(c.Request().Context(), id, userID, &req)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -147,6 +133,8 @@ func (h *BudgetHandler) Delete(c *echo.Context) error {
 
 func mapBudgetValidationErrors(err error) error {
 	switch err.Error() {
+	case "name":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_budget_name")
 	case "amount":
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_budget_amount")
 	case "interval_type":

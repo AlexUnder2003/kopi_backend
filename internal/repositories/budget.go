@@ -13,11 +13,13 @@ import (
 
 const budgetSelectColumns = `
 	b.id,
+	b.name,
 	b.amount,
 	b.balance,
 	b.interval_type,
 	b."interval",
 	b.currency,
+	b.start_date,
 	b.reset_date,
 	c.id AS "category.id",
 	c.name AS "category.name",
@@ -35,10 +37,10 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*
 	const q = `
 		WITH inserted AS (
 			INSERT INTO budgets (
-				amount, balance, user_id, currency, interval_type, "interval", reset_date, category_id
+				name, amount, balance, user_id, currency, interval_type, "interval", start_date, reset_date, category_id
 			)
-			VALUES ($1, COALESCE($2, $1), $3, $4, $5, $6, $7, $8)
-			RETURNING id, amount, balance, user_id, currency, interval_type, "interval", reset_date, category_id
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, category_id
 		)
 		SELECT ` + budgetSelectColumns + `
 		FROM inserted b
@@ -47,12 +49,14 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*
 	var resp dto.BudgetResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
+		budget.Name,
 		budget.Amount,
-		nullDecimal(budget.Balance),
+		budget.Amount,
 		budget.UserID,
 		budget.Currency,
 		budget.IntervalType,
-		budget.Interval,
+		nullInt(budget.Interval),
+		budget.StartDate,
 		budget.ResetDate,
 		budget.CategoryID,
 	); err != nil {
@@ -94,14 +98,14 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 	const q = `
 		WITH updated AS (
 			UPDATE budgets
-			SET amount = COALESCE($2, amount),
-			    balance = COALESCE($3, balance),
+			SET name = COALESCE($2, name),
+			    amount = COALESCE($3::numeric, amount),
 			    interval_type = COALESCE($4::interval_type, interval_type),
-			    "interval" = COALESCE($5, "interval"),
-			    reset_date = COALESCE($6, reset_date),
-			    category_id = COALESCE($7, category_id)
+			    "interval" = COALESCE($5::int, "interval"),
+			    start_date = COALESCE($6::date, start_date),
+			    reset_date = COALESCE($7::date, reset_date)
 			WHERE id = $1
-			RETURNING id, amount, balance, user_id, interval_type, "interval", reset_date, category_id
+			RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, category_id
 		)
 		SELECT ` + budgetSelectColumns + `
 		FROM updated b
@@ -111,13 +115,12 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
 		budget.ID,
+		nullString(budget.Name),
 		nullDecimal(budget.Amount),
-		nullDecimal(budget.Balance),
-		nullString(budget.Currency),
 		nullString(string(budget.IntervalType)),
 		nullInt(budget.Interval),
+		nullTime(budget.StartDate),
 		nullTime(budget.ResetDate),
-		nullUUID(budget.CategoryID),
 	); err != nil {
 		return nil, err
 	}
