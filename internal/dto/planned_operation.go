@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"errors"
 	"time"
 
 	"KopiBackend/internal/models"
@@ -29,6 +30,31 @@ type PlannedOperationPost struct {
 	IsRecurring bool                      `json:"is_recurring"`
 }
 
+func (r *PlannedOperationPost) Validate() error {
+	if r.Name == "" {
+		return errors.New("name")
+	}
+	if !r.Amount.IsPositive() {
+		return errors.New("amount")
+	}
+	if !validTransactionType(r.Type) {
+		return errors.New("type")
+	}
+	if !validPlannedOperationFrequency(r.Frequency) {
+		return errors.New("frequency")
+	}
+	if r.AccountID == uuid.Nil {
+		return errors.New("account_id")
+	}
+	if r.CategoryID == uuid.Nil {
+		return errors.New("category_id")
+	}
+	if r.PlannedAt.IsZero() {
+		return errors.New("planned_date")
+	}
+	return nil
+}
+
 type PlannedOperationUpdate struct {
 	Name        string                    `json:"name,omitempty"`
 	AccountID   uuid.UUID                 `json:"account_id,omitempty"`
@@ -37,7 +63,29 @@ type PlannedOperationUpdate struct {
 	Frequency   PlannedOperationFrequency `json:"frequency,omitempty"`
 	CategoryID  uuid.UUID                 `json:"category_id,omitempty"`
 	PlannedAt   time.Time                 `json:"planned_date,omitempty"`
-	IsRecurring bool                      `json:"is_recurring,omitempty"`
+	IsRecurring *bool                     `json:"is_recurring,omitempty"`
+}
+
+func (r *PlannedOperationUpdate) Validate() error {
+	if r.Type != "" && !validTransactionType(r.Type) {
+		return errors.New("type")
+	}
+	if r.Frequency != "" && !validPlannedOperationFrequency(r.Frequency) {
+		return errors.New("frequency")
+	}
+	if r.Amount.IsNegative() {
+		return errors.New("amount")
+	}
+	return nil
+}
+
+func validPlannedOperationFrequency(frequency PlannedOperationFrequency) bool {
+	switch frequency {
+	case PlannedOperationFrequencyDaily, PlannedOperationFrequencyWeekly, PlannedOperationFrequencyMonthly, PlannedOperationFrequencyYearly:
+		return true
+	default:
+		return false
+	}
 }
 
 type PlannedOperationResponse struct {

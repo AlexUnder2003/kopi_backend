@@ -26,5 +26,5 @@ type PlannedOperation struct {
 	CategoryID  uuid.UUID                 `db:"category_id"`
 	PlannedAt   time.Time                 `db:"planned_at"`
 	NextRunAt   *time.Time                `db:"next_run_at"`
-	IsRecurring bool                      `db:"is_recurring"`
+	IsRecurring *bool                     `db:"is_recurring"`
 }

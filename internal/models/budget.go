@@ -1,24 +1,30 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 )
 
-type BudgetFrequency string
+type IntervalType string
 
 const (
-	BudgetFrequencyDaily   BudgetFrequency = "daily"
-	BudgetFrequencyWeekly  BudgetFrequency = "weekly"
-	BudgetFrequencyMonthly BudgetFrequency = "monthly"
-	BudgetFrequencyYearly  BudgetFrequency = "yearly"
+	IntervalTypeDaily    IntervalType = "daily"
+	IntervalTypeWeekly   IntervalType = "weekly"
+	IntervalTypeBiweekly IntervalType = "biweekly"
+	IntervalTypeMonthly  IntervalType = "monthly"
+	IntervalTypeCustom   IntervalType = "custom"
 )
 
 type Budget struct {
-	ID         uuid.UUID       `db:"id"`
-	Amount     decimal.Decimal `db:"amount"`
-	UserID     uuid.UUID       `db:"user_id"`
-	Currency   string          `db:"currency"`
-	Frequency  BudgetFrequency `db:"frequency"`
-	CategoryID uuid.UUID       `db:"category_id"`
+	ID           uuid.UUID       `db:"id"`
+	Amount       decimal.Decimal `db:"amount"`
+	Balance      decimal.Decimal `db:"balance"`
+	UserID       uuid.UUID       `db:"user_id"`
+	Currency     string          `db:"currency"`
+	IntervalType IntervalType    `db:"interval_type"`
+	Interval     int             `db:"interval"`
+	ResetDate    time.Time       `db:"reset_date"`
+	CategoryID   uuid.UUID       `db:"category_id"`
 }

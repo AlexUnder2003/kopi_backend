@@ -1,4 +1,4 @@
-CREATE TYPE planned_operation_frequency AS ENUM ('daily', 'weekly', 'monthly', 'yearly');
+CREATE TYPE planned_operation_frequency AS ENUM ('daily', 'weekly', 'biweekly', 'monthly');
 
 CREATE TABLE planned_operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -17,5 +17,5 @@ CREATE TABLE planned_operations (
 
 CREATE INDEX idx_planned_operations_next_run_at ON planned_operations(next_run_at);
 CREATE INDEX idx_planned_operations_account_id ON planned_operations(account_id);
-CREATE INDEX idx_planned_operations_category_id ON planned_operations(category_id);
+
 CREATE TRIGGER update_planned_operations_updated_at BEFORE UPDATE ON planned_operations FOR EACH ROW EXECUTE FUNCTION update_updated_at();

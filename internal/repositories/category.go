@@ -34,6 +34,20 @@ func (r *CategoryRepository) Create(ctx context.Context, category *models.Catego
 	return &resp, nil
 }
 
+func (r *CategoryRepository) Accessible(ctx context.Context, id, userID uuid.UUID) (bool, error) {
+	const q = `
+		SELECT EXISTS (
+			SELECT 1 FROM categories
+			WHERE id = $1 AND (user_id IS NULL OR user_id = $2)
+		)`
+
+	var ok bool
+	if err := r.db.QueryRowContext(ctx, q, id, userID).Scan(&ok); err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
 func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.CategoryResponse, error) {
 	const q = `SELECT id, name, icon FROM categories WHERE id = $1`
 

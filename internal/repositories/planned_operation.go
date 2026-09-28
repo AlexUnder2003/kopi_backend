@@ -111,7 +111,7 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 			    category_id = COALESCE($7, category_id),
 			    planned_at = COALESCE($8, planned_at),
 			    next_run_at = COALESCE($9, next_run_at),
-			    is_recurring = $10
+			    is_recurring = COALESCE($10::boolean, is_recurring)
 			WHERE id = $1
 			RETURNING id, name, account_id, amount, type, frequency, category_id, planned_at, is_recurring
 		)
@@ -132,7 +132,7 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 		nullUUID(op.CategoryID),
 		nullTime(op.PlannedAt),
 		nullTimePtr(op.NextRunAt),
-		op.IsRecurring,
+		nullBoolPtr(op.IsRecurring),
 	); err != nil {
 		return nil, err
 	}

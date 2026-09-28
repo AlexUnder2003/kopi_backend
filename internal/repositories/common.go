@@ -21,6 +21,13 @@ func DBorTx(db *sql.DB, tx *sql.Tx) executor {
 	return db
 }
 
+func nullInt(n int) any {
+	if n == 0 {
+		return nil
+	}
+	return n
+}
+
 func nullString(s string) any {
 	if s == "" {
 		return nil
@@ -47,6 +54,13 @@ func nullTime(t time.Time) any {
 		return nil
 	}
 	return t
+}
+
+func nullBoolPtr(b *bool) any {
+	if b == nil {
+		return nil
+	}
+	return *b
 }
 
 func nullTimePtr(t *time.Time) any {
