@@ -9,6 +9,8 @@ import (
 
 	"github.com/georgysavva/scany/v2/sqlscan"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/shopspring/decimal"
 )
 
 const budgetSelectColumns = `
@@ -125,6 +127,40 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, tx *sql.Tx) ([]uuid.UUID, error) {
+	const q = `
+		SELECT id
+		FROM budgets
+		WHERE user_id = $1 AND category_id = $2
+		FOR UPDATE`
+
+	rows, err := tx.QueryContext(ctx, q, userID, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (r *BudgetRepository) UpdateBalance(ctx context.Context, ids []uuid.UUID, balance decimal.Decimal, tx *sql.Tx) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	const q = `UPDATE budgets SET balance = balance + $1 WHERE id = ANY($2)`
+	_, err := tx.ExecContext(ctx, q, balance, pq.Array(ids))
+	return err
 }
 
 func (r *BudgetRepository) Delete(ctx context.Context, id uuid.UUID) error {

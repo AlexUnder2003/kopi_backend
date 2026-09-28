@@ -21,6 +21,7 @@ type TransactionService struct {
 	db              *sql.DB
 	transactionRepo *repositories.TransactionRepository
 	accountRepo     *repositories.AccountRepository
+	budgetRepo      *repositories.BudgetRepository
 	logger          *zap.SugaredLogger
 }
 
@@ -29,11 +30,12 @@ func NewTransactionService(db *sql.DB, logger *zap.SugaredLogger) *TransactionSe
 		db:              db,
 		transactionRepo: repositories.NewTransactionRepository(db),
 		accountRepo:     repositories.NewAccountRepository(db),
+		budgetRepo:      repositories.NewBudgetRepository(db),
 		logger:          logger,
 	}
 }
 
-func (s *TransactionService) Create(ctx context.Context, transaction *models.Transaction) (any, error) {
+func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (any, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Errorw("failed to begin transaction", "error", err)
@@ -47,7 +49,16 @@ func (s *TransactionService) Create(ctx context.Context, transaction *models.Tra
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	if err := s.applyEffects(ctx, tx, transaction.Type, transaction.AccountID, transaction.FromAccountID, transaction.Amount); err != nil {
+	if err := s.applyEffects(
+		ctx,
+		tx,
+		transaction.Type,
+		transaction.AccountID,
+		transaction.FromAccountID,
+		transaction.CategoryID,
+		userID,
+		transaction.Amount,
+	); err != nil {
 		return nil, err
 	}
 
@@ -104,7 +115,16 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 	}
 
 	if !transaction.Amount.IsZero() {
-		if err := s.applyEffects(ctx, tx, existing.Type, existing.Account.ID, existing.FromAccount.ID, transaction.Amount.Sub(existing.Amount)); err != nil {
+		if err := s.applyEffects(
+			ctx,
+			tx,
+			existing.Type,
+			existing.Account.ID,
+			existing.FromAccount.ID,
+			existing.Category.ID,
+			userID,
+			transaction.Amount.Sub(existing.Amount),
+		); err != nil {
 			return nil, err
 		}
 	}
@@ -135,7 +155,16 @@ func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) e
 		return apperrors.Internal(errInternalServerError)
 	}
 
-	if err := s.applyEffects(ctx, tx, transaction.Type, transaction.Account.ID, transaction.FromAccount.ID, transaction.Amount.Neg()); err != nil {
+	if err := s.applyEffects(
+		ctx,
+		tx,
+		transaction.Type,
+		transaction.Account.ID,
+		transaction.FromAccount.ID,
+		transaction.Category.ID,
+		userID,
+		transaction.Amount.Neg(),
+	); err != nil {
 		return err
 	}
 
@@ -159,7 +188,13 @@ func (s *TransactionService) get(ctx context.Context, id, userID uuid.UUID) (*dt
 	return transaction, nil
 }
 
-func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txType models.TransactionType, accountID, fromAccountID uuid.UUID, amount decimal.Decimal) error {
+func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txType models.TransactionType, accountID, fromAccountID, categoryID, userID uuid.UUID, amount decimal.Decimal) error {
+	budgetIDs, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, tx)
+	if err != nil {
+		s.logger.Errorw("failed to get budgets by category ID", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
 	switch txType {
 	case models.TransactionTypeTransfer:
 		if err := s.accountRepo.UpdateBalance(ctx, accountID, amount, tx); err != nil {
@@ -175,7 +210,15 @@ func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txTyp
 			s.logger.Errorw("failed to update account balance", "error", err)
 			return apperrors.Internal(errInternalServerError)
 		}
+
+		if txType == models.TransactionTypeExpense {
+			if err := s.budgetRepo.UpdateBalance(ctx, budgetIDs, signed(txType, amount), tx); err != nil {
+				s.logger.Errorw("failed to update budget balance", "error", err)
+				return apperrors.Internal(errInternalServerError)
+			}
+		}
 	}
+
 	return nil
 }
 

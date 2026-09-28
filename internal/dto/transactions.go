@@ -33,7 +33,7 @@ func (r *TransactionUpdate) Validate() error {
 	if r.Type != "" && !validTransactionType(r.Type) {
 		return errors.New("type")
 	}
-	if r.Amount.IsNegative() {
+	if !r.Amount.IsPositive() {
 		return errors.New("amount")
 	}
 	if r.FromAccountID != uuid.Nil && r.AccountID != uuid.Nil && r.FromAccountID == r.AccountID {

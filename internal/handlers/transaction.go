@@ -38,7 +38,8 @@ func (h *TransactionHandler) Register(g *echo.Group) {
 }
 
 func (h *TransactionHandler) Create(c *echo.Context) error {
-	if _, err := utils.GetUserIDFromContext(c); err != nil {
+	userID, err := utils.GetUserIDFromContext(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -50,7 +51,7 @@ func (h *TransactionHandler) Create(c *echo.Context) error {
 		return mapTransactionValidationErrors(err)
 	}
 
-	resp, err := h.transactionService.Create(c.Request().Context(), &models.Transaction{
+	resp, err := h.transactionService.Create(c.Request().Context(), userID, &models.Transaction{
 		Name:           req.Name,
 		Amount:         req.Amount,
 		Type:           req.Type,
