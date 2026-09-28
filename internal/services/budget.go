@@ -12,6 +12,7 @@ import (
 	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +54,10 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 
 	created, err := s.budgetRepo.Create(ctx, budgetModel)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, apperrors.Conflict(errMsgBudgetAlreadyExists)
+		}
 		s.logger.Errorw("failed to create budget", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
@@ -132,6 +137,40 @@ func (s *BudgetService) Delete(ctx context.Context, id, userID uuid.UUID) error 
 		s.logger.Errorw("failed to delete budget", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
+	return nil
+}
+
+func (s *BudgetService) Reset(ctx context.Context) error {
+	budgets, err := s.budgetRepo.GetByResetDate(ctx, time.Now())
+	if err != nil {
+		s.logger.Errorw("failed to get budgets by reset date", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if len(budgets) == 0 {
+		return nil
+	}
+
+	budgetModels := make([]models.Budget, len(budgets))
+	for i, budget := range budgets {
+		var interval int
+
+		if budget.Interval != nil {
+			interval = *budget.Interval
+		}
+
+		budgetModels[i] = models.Budget{
+			ID:        budget.ID,
+			Balance:   budget.Amount,
+			ResetDate: s.CalculateResetDate(ctx, budget.ResetDate, budget.IntervalType, interval),
+		}
+	}
+
+	if err := s.budgetRepo.BulkUpdate(ctx, budgetModels); err != nil {
+		s.logger.Errorw("failed to bulk update budgets", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
 	return nil
 }
 

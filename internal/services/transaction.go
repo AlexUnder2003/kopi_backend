@@ -189,9 +189,9 @@ func (s *TransactionService) get(ctx context.Context, id, userID uuid.UUID) (*dt
 }
 
 func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txType models.TransactionType, accountID, fromAccountID, categoryID, userID uuid.UUID, amount decimal.Decimal) error {
-	budgetIDs, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, tx)
-	if err != nil {
-		s.logger.Errorw("failed to get budgets by category ID", "error", err)
+	budgetID, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, tx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		s.logger.Errorw("failed to get budget by category ID", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 
@@ -211,8 +211,8 @@ func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txTyp
 			return apperrors.Internal(errInternalServerError)
 		}
 
-		if txType == models.TransactionTypeExpense {
-			if err := s.budgetRepo.UpdateBalance(ctx, budgetIDs, signed(txType, amount), tx); err != nil {
+		if txType == models.TransactionTypeExpense && budgetID != uuid.Nil {
+			if err := s.budgetRepo.UpdateBalance(ctx, budgetID, signed(txType, amount), tx); err != nil {
 				s.logger.Errorw("failed to update budget balance", "error", err)
 				return apperrors.Internal(errInternalServerError)
 			}

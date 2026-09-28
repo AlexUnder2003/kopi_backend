@@ -18,6 +18,9 @@ func (r *AccountPost) Validate() error {
 	if r.Name == "" {
 		return errors.New("name")
 	}
+	if r.Icon == "" {
+		return errors.New("icon")
+	}
 	if r.Currency == "" {
 		return errors.New("currency")
 	}

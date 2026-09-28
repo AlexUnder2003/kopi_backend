@@ -3,13 +3,13 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
 
 	"github.com/georgysavva/scany/v2/sqlscan"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 )
 
@@ -129,38 +129,72 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 	return &resp, nil
 }
 
-func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, tx *sql.Tx) ([]uuid.UUID, error) {
+func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, tx *sql.Tx) (uuid.UUID, error) {
 	const q = `
 		SELECT id
 		FROM budgets
 		WHERE user_id = $1 AND category_id = $2
 		FOR UPDATE`
 
-	rows, err := tx.QueryContext(ctx, q, userID, categoryID)
-	if err != nil {
-		return nil, err
+	var id uuid.UUID
+	if err := tx.QueryRowContext(ctx, q, userID, categoryID).Scan(&id); err != nil {
+		return uuid.Nil, err
 	}
-	defer rows.Close()
-
-	var ids []uuid.UUID
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return id, nil
 }
 
-func (r *BudgetRepository) UpdateBalance(ctx context.Context, ids []uuid.UUID, balance decimal.Decimal, tx *sql.Tx) error {
-	if len(ids) == 0 {
+func (r *BudgetRepository) UpdateBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	const q = `UPDATE budgets SET balance = balance + $2 WHERE id = $1`
+	_, err := tx.ExecContext(ctx, q, id, delta)
+	return err
+}
+
+func (r *BudgetRepository) BulkUpdate(ctx context.Context, budgets []models.Budget) error {
+	if len(budgets) == 0 {
 		return nil
 	}
 
-	const q = `UPDATE budgets SET balance = balance + $1 WHERE id = ANY($2)`
-	_, err := tx.ExecContext(ctx, q, balance, pq.Array(ids))
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	ids := make([]string, len(budgets))
+	balances := make([]string, len(budgets))
+	resetDates := make([]string, len(budgets))
+
+	for i, budget := range budgets {
+		ids[i] = budget.ID.String()
+		balances[i] = budget.Balance.String()
+		resetDates[i] = budget.ResetDate.Format(time.DateOnly)
+	}
+
+	const q = `
+		UPDATE budgets AS b
+		SET balance = v.balance::numeric,
+		    reset_date = v.reset_date::date
+		FROM unnest($1::text[], $2::text[], $3::text[]) AS v(id, balance, reset_date)
+		WHERE b.id = v.id::uuid`
+
+	if _, err = tx.ExecContext(ctx, q, ids, balances, resetDates); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (r *BudgetRepository) GetByResetDate(ctx context.Context, resetDate time.Time) ([]dto.BudgetResponse, error) {
+	const q = `
+		SELECT ` + budgetSelectColumns + `
+		FROM budgets b
+		JOIN categories c ON c.id = b.category_id
+		WHERE b.reset_date <= $1`
+	var resp []dto.BudgetResponse
+	if err := sqlscan.Select(ctx, r.db, &resp, q, resetDate); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (r *BudgetRepository) Delete(ctx context.Context, id uuid.UUID) error {

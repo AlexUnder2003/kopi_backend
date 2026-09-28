@@ -6,6 +6,8 @@ import (
 	"KopiBackend/internal/handlers"
 	"KopiBackend/internal/routes"
 	"KopiBackend/internal/services"
+	"KopiBackend/internal/workers"
+	"context"
 
 	"database/sql"
 
@@ -13,10 +15,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type Worker interface {
+	Run(ctx context.Context)
+}
+
 type App struct {
-	config *config.AppConfig
-	router *echo.Echo
-	db     *sql.DB
+	config  *config.AppConfig
+	router  *echo.Echo
+	db      *sql.DB
+	workers []Worker
 }
 
 func NewApp() *App {
@@ -50,8 +57,8 @@ func NewApp() *App {
 		handlers.NewBudgetHandler(budgetService),
 	}
 	router := routes.Router(hs)
-
-	return &App{config: cfg, router: router, db: database}
+	budgetWorker := workers.NewBudgetWorker(budgetService)
+	return &App{config: cfg, router: router, db: database, workers: []Worker{budgetWorker}}
 }
 
 func (a *App) Run() {
@@ -59,6 +66,11 @@ func (a *App) Run() {
 	if addr == "" {
 		addr = ":8080"
 	}
+
+	for _, worker := range a.workers {
+		go worker.Run(context.Background())
+	}
+
 	if err := a.router.Start(addr); err != nil {
 		panic(err)
 	}
