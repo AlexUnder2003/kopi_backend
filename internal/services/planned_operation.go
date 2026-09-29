@@ -21,6 +21,8 @@ type PlannedOperationService struct {
 	db                   *sql.DB
 	plannedOperationRepo *repositories.PlannedOperationRepository
 	transactionRepo      *repositories.TransactionRepository
+	accountRepo          *repositories.AccountRepository
+	budgetRepo           *repositories.BudgetRepository
 	accountService       *AccountService
 	logger               *zap.SugaredLogger
 }
@@ -30,6 +32,8 @@ func NewPlannedOperationService(db *sql.DB, accountService *AccountService, logg
 		db:                   db,
 		plannedOperationRepo: repositories.NewPlannedOperationRepository(db),
 		transactionRepo:      repositories.NewTransactionRepository(db),
+		accountRepo:          repositories.NewAccountRepository(db),
+		budgetRepo:           repositories.NewBudgetRepository(db),
 		accountService:       accountService,
 		logger:               logger,
 	}
@@ -157,7 +161,10 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	var transactions []models.Transaction
+	transactions := make([]models.Transaction, 0, len(ops))
+	accountUpdates := make([]dto.AccountBalanceUpdate, 0, len(ops))
+	var budgetUpdates []dto.BudgetBalanceUpdate
+	updatedOps := make([]models.PlannedOperation, 0, len(ops))
 
 	for _, op := range ops {
 		transactions = append(transactions, models.Transaction{
@@ -168,15 +175,22 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			OccurrenceDate: op.PlannedAt,
 			CategoryID:     op.Category.ID,
 		})
-	}
 
-	if err := s.transactionRepo.BulkCreate(ctx, transactions, tx); err != nil {
-		s.logger.Errorw("failed to bulk create transactions", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
+		delta := signed(op.Type, op.Amount)
+		accountUpdates = append(accountUpdates, dto.AccountBalanceUpdate{
+			ID:    op.Account.ID,
+			Delta: delta,
+		})
 
-	var updatedOps []models.PlannedOperation
-	for _, op := range ops {
+		if op.Type == models.TransactionTypeExpense {
+			budgetUpdates = append(budgetUpdates, dto.BudgetBalanceUpdate{
+				UserID:     op.UserID,
+				CategoryID: op.Category.ID,
+				Currency:   op.Account.Currency,
+				Delta:      delta,
+			})
+		}
+
 		if op.IsRecurring {
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
@@ -187,6 +201,21 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 				ID: op.ID,
 			})
 		}
+	}
+
+	if err := s.transactionRepo.BulkCreate(ctx, transactions, tx); err != nil {
+		s.logger.Errorw("failed to bulk create transactions", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.accountRepo.BulkUpdateBalance(ctx, accountUpdates, tx); err != nil {
+		s.logger.Errorw("failed to bulk update account balances", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.budgetRepo.BulkUpdateBalance(ctx, budgetUpdates, tx); err != nil {
+		s.logger.Errorw("failed to bulk update budget balances", "error", err)
+		return apperrors.Internal(errInternalServerError)
 	}
 
 	if err := s.plannedOperationRepo.BulkUpdate(ctx, updatedOps, tx); err != nil {

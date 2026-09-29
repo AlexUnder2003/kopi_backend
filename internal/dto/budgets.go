@@ -70,6 +70,13 @@ func (r *BudgetUpdate) Validate() error {
 	return nil
 }
 
+type BudgetBalanceUpdate struct {
+	UserID     uuid.UUID
+	CategoryID uuid.UUID
+	Currency   string
+	Delta      decimal.Decimal
+}
+
 type BudgetResponse struct {
 	ID           uuid.UUID           `json:"id" db:"id"`
 	Name         string              `json:"name" db:"name"`

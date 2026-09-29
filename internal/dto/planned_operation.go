@@ -72,6 +72,11 @@ func (r *PlannedOperationUpdate) Validate() error {
 	return nil
 }
 
+type PlannedOperationDueResponse struct {
+	PlannedOperationResponse
+	UserID uuid.UUID `db:"user_id"`
+}
+
 type PlannedOperationResponse struct {
 	ID           uuid.UUID              `json:"id" db:"id"`
 	Name         string                 `json:"name" db:"name"`

@@ -45,6 +45,11 @@ type AccountResponseShort struct {
 	Icon     string    `json:"icon" db:"icon"`
 }
 
+type AccountBalanceUpdate struct {
+	ID    uuid.UUID
+	Delta decimal.Decimal
+}
+
 type AccountResponse struct {
 	ID       uuid.UUID       `json:"id" db:"id"`
 	Name     string          `json:"name" db:"name"`

@@ -164,7 +164,7 @@ func (s *BudgetService) Reset(ctx context.Context) error {
 		}
 	}
 
-	if err := s.budgetRepo.BulkUpdate(ctx, budgetModels); err != nil {
+	if err := s.budgetRepo.BulkReset(ctx, budgetModels); err != nil {
 		s.logger.Errorw("failed to bulk update budgets", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}

@@ -132,18 +132,50 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 	return &resp, nil
 }
 
-func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, tx *sql.Tx) (uuid.UUID, error) {
+func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, currency string, tx *sql.Tx) (uuid.UUID, error) {
 	const q = `
 		SELECT id
 		FROM budgets
-		WHERE user_id = $1 AND category_id = $2
+		WHERE user_id = $1 AND category_id = $2 AND currency = $3
+		AND is_active = TRUE
 		FOR UPDATE SKIP LOCKED`
 
 	var id uuid.UUID
-	if err := tx.QueryRowContext(ctx, q, userID, categoryID).Scan(&id); err != nil {
+	if err := tx.QueryRowContext(ctx, q, userID, categoryID, currency).Scan(&id); err != nil {
 		return uuid.Nil, err
 	}
 	return id, nil
+}
+
+func (r *BudgetRepository) BulkUpdateBalance(ctx context.Context, updates []dto.BudgetBalanceUpdate, tx *sql.Tx) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	userIDs := make([]string, len(updates))
+	categoryIDs := make([]string, len(updates))
+	currencies := make([]string, len(updates))
+	deltas := make([]string, len(updates))
+
+	for i, update := range updates {
+		userIDs[i] = update.UserID.String()
+		categoryIDs[i] = update.CategoryID.String()
+		currencies[i] = update.Currency
+		deltas[i] = update.Delta.String()
+	}
+
+	const q = `
+		UPDATE budgets AS b
+		SET balance = b.balance + v.delta
+		FROM (
+			SELECT user_id::uuid, category_id::uuid, currency::text, SUM(delta::numeric) AS delta
+			FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS u(user_id, category_id, currency, delta)
+			GROUP BY user_id, category_id, currency
+		) AS v
+			WHERE b.user_id = v.user_id AND b.category_id = v.category_id AND b.currency::text = v.currency`
+
+	_, err := DBorTx(r.db, tx).ExecContext(ctx, q, userIDs, categoryIDs, currencies, deltas)
+	return err
 }
 
 func (r *BudgetRepository) UpdateBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
@@ -152,7 +184,7 @@ func (r *BudgetRepository) UpdateBalance(ctx context.Context, id uuid.UUID, delt
 	return err
 }
 
-func (r *BudgetRepository) BulkUpdate(ctx context.Context, budgets []models.Budget) error {
+func (r *BudgetRepository) BulkReset(ctx context.Context, budgets []models.Budget) error {
 	if len(budgets) == 0 {
 		return nil
 	}

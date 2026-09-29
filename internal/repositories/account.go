@@ -78,6 +78,32 @@ func (r *AccountRepository) Update(ctx context.Context, account *models.Account)
 	return &resp, nil
 }
 
+func (r *AccountRepository) BulkUpdateBalance(ctx context.Context, updates []dto.AccountBalanceUpdate, tx *sql.Tx) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	ids := make([]string, len(updates))
+	deltas := make([]string, len(updates))
+	for i, update := range updates {
+		ids[i] = update.ID.String()
+		deltas[i] = update.Delta.String()
+	}
+
+	const q = `
+		UPDATE accounts AS a
+		SET balance = a.balance + v.delta
+		FROM (
+			SELECT id::uuid, SUM(delta::numeric) AS delta
+			FROM unnest($1::text[], $2::text[]) AS u(id, delta)
+			GROUP BY id
+		) AS v
+		WHERE a.id = v.id`
+
+	_, err := DBorTx(r.db, tx).ExecContext(ctx, q, ids, deltas)
+	return err
+}
+
 func (r *AccountRepository) UpdateBalance(ctx context.Context, accountID uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
 	const q = `
 		UPDATE accounts

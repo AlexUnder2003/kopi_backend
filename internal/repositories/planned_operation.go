@@ -144,16 +144,17 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 	return &resp, nil
 }
 
-func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time) ([]dto.PlannedOperationResponse, error) {
+func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time) ([]dto.PlannedOperationDueResponse, error) {
 	const q = `
-		SELECT ` + plannedOperationSelectColumns + `
+		SELECT ` + plannedOperationSelectColumns + `,
+			a.user_id
 		FROM planned_operations p
 		JOIN accounts a ON a.id = p.account_id
 		JOIN categories c ON c.id = p.category_id
 		WHERE p.next_run_at <= $1
 		ORDER BY p.next_run_at
 		FOR UPDATE SKIP LOCKED`
-	var resp []dto.PlannedOperationResponse
+	var resp []dto.PlannedOperationDueResponse
 	if err := sqlscan.Select(ctx, r.db, &resp, q, nextRunAt); err != nil {
 		return nil, err
 	}

@@ -36,6 +36,11 @@ func NewTransactionService(db *sql.DB, logger *zap.SugaredLogger) *TransactionSe
 }
 
 func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (any, error) {
+	account, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
+	if err != nil {
+		return nil, err
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Errorw("failed to begin transaction", "error", err)
@@ -58,6 +63,7 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, trans
 		transaction.CategoryID,
 		userID,
 		transaction.Amount,
+		account.Currency,
 	); err != nil {
 		return nil, err
 	}
@@ -98,6 +104,11 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 		return nil, err
 	}
 
+	account, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
+	if err != nil {
+		return nil, err
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Errorw("failed to begin transaction", "error", err)
@@ -124,6 +135,7 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 			existing.Category.ID,
 			userID,
 			transaction.Amount.Sub(existing.Amount),
+			account.Currency,
 		); err != nil {
 			return nil, err
 		}
@@ -139,6 +151,11 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 
 func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	transaction, err := s.get(ctx, id, userID)
+	if err != nil {
+		return err
+	}
+
+	account, err := s.accountRepo.GetByID(ctx, transaction.Account.ID)
 	if err != nil {
 		return err
 	}
@@ -164,6 +181,7 @@ func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) e
 		transaction.Category.ID,
 		userID,
 		transaction.Amount.Neg(),
+		account.Currency,
 	); err != nil {
 		return err
 	}
@@ -188,8 +206,15 @@ func (s *TransactionService) get(ctx context.Context, id, userID uuid.UUID) (*dt
 	return transaction, nil
 }
 
-func (s *TransactionService) applyEffects(ctx context.Context, tx *sql.Tx, txType models.TransactionType, accountID, fromAccountID, categoryID, userID uuid.UUID, amount decimal.Decimal) error {
-	budgetID, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, tx)
+func (s *TransactionService) applyEffects(
+	ctx context.Context,
+	tx *sql.Tx,
+	txType models.TransactionType,
+	accountID, fromAccountID, categoryID, userID uuid.UUID,
+	amount decimal.Decimal,
+	currency string,
+) error {
+	budgetID, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, currency, tx)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		s.logger.Errorw("failed to get budget by category ID", "error", err)
 		return apperrors.Internal(errInternalServerError)
