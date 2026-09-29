@@ -23,6 +23,7 @@ const budgetSelectColumns = `
 	b.currency,
 	b.start_date,
 	b.reset_date,
+	b.is_active,
 	c.id AS "category.id",
 	c.name AS "category.name",
 	c.icon AS "category.icon"`
@@ -42,10 +43,10 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*
 				name, amount, balance, user_id, currency, interval_type, "interval", start_date, reset_date, category_id
 			)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, category_id
-		)
-		SELECT ` + budgetSelectColumns + `
-		FROM inserted b
+				RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, is_active, category_id
+			)
+			SELECT ` + budgetSelectColumns + `
+			FROM inserted b
 		JOIN categories c ON c.id = b.category_id`
 
 	var resp dto.BudgetResponse
@@ -104,26 +105,28 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 			    amount = COALESCE($3::numeric, amount),
 			    interval_type = COALESCE($4::interval_type, interval_type),
 			    "interval" = COALESCE($5::int, "interval"),
-			    start_date = COALESCE($6::date, start_date),
-			    reset_date = COALESCE($7::date, reset_date)
-			WHERE id = $1
-			RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, category_id
-		)
-		SELECT ` + budgetSelectColumns + `
-		FROM updated b
-		JOIN categories c ON c.id = b.category_id`
+				    start_date = COALESCE($6::date, start_date),
+				    reset_date = COALESCE($7::date, reset_date),
+				    is_active = COALESCE($8::boolean, is_active)
+				WHERE id = $1
+				RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, is_active, category_id
+			)
+			SELECT ` + budgetSelectColumns + `
+			FROM updated b
+			JOIN categories c ON c.id = b.category_id`
 
-	var resp dto.BudgetResponse
-	if err := sqlscan.Get(
-		ctx, r.db, &resp, q,
-		budget.ID,
-		nullString(budget.Name),
-		nullDecimal(budget.Amount),
-		nullString(string(budget.IntervalType)),
-		nullInt(budget.Interval),
-		nullTime(budget.StartDate),
-		nullTime(budget.ResetDate),
-	); err != nil {
+		var resp dto.BudgetResponse
+		if err := sqlscan.Get(
+			ctx, r.db, &resp, q,
+			budget.ID,
+			nullString(budget.Name),
+			nullDecimal(budget.Amount),
+			nullString(string(budget.IntervalType)),
+			nullInt(budget.Interval),
+			nullTime(budget.StartDate),
+			nullTime(budget.ResetDate),
+			nullBoolPtr(budget.IsActive),
+		); err != nil {
 		return nil, err
 	}
 	return &resp, nil

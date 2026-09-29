@@ -10,24 +10,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-type PlannedOperationFrequency string
-
-const (
-	PlannedOperationFrequencyDaily   PlannedOperationFrequency = "daily"
-	PlannedOperationFrequencyWeekly  PlannedOperationFrequency = "weekly"
-	PlannedOperationFrequencyMonthly PlannedOperationFrequency = "monthly"
-	PlannedOperationFrequencyYearly  PlannedOperationFrequency = "yearly"
-)
-
 type PlannedOperationPost struct {
-	Name        string                    `json:"name"`
-	AccountID   uuid.UUID                 `json:"account_id"`
-	Amount      decimal.Decimal           `json:"amount"`
-	Type        models.TransactionType    `json:"type"`
-	Frequency   PlannedOperationFrequency `json:"frequency"`
-	CategoryID  uuid.UUID                 `json:"category_id"`
-	PlannedAt   time.Time                 `json:"planned_date"`
-	IsRecurring bool                      `json:"is_recurring"`
+	Name         string                 `json:"name"`
+	AccountID    uuid.UUID              `json:"account_id"`
+	Amount       decimal.Decimal        `json:"amount"`
+	Type         models.TransactionType `json:"type"`
+	IntervalType models.IntervalType    `json:"interval_type"`
+	Interval     int                    `json:"interval"`
+	CategoryID   uuid.UUID              `json:"category_id"`
+	PlannedAt    time.Time              `json:"planned_date"`
+	IsRecurring  bool                   `json:"is_recurring"`
 }
 
 func (r *PlannedOperationPost) Validate() error {
@@ -40,8 +32,8 @@ func (r *PlannedOperationPost) Validate() error {
 	if !validTransactionType(r.Type) {
 		return errors.New("type")
 	}
-	if !validPlannedOperationFrequency(r.Frequency) {
-		return errors.New("frequency")
+	if !validIntervalType(r.IntervalType) {
+		return errors.New("interval_type")
 	}
 	if r.AccountID == uuid.Nil {
 		return errors.New("account_id")
@@ -56,22 +48,23 @@ func (r *PlannedOperationPost) Validate() error {
 }
 
 type PlannedOperationUpdate struct {
-	Name        string                    `json:"name,omitempty"`
-	AccountID   uuid.UUID                 `json:"account_id,omitempty"`
-	Amount      decimal.Decimal           `json:"amount,omitempty"`
-	Type        models.TransactionType    `json:"type,omitempty"`
-	Frequency   PlannedOperationFrequency `json:"frequency,omitempty"`
-	CategoryID  uuid.UUID                 `json:"category_id,omitempty"`
-	PlannedAt   time.Time                 `json:"planned_date,omitempty"`
-	IsRecurring *bool                     `json:"is_recurring,omitempty"`
+	Name         string                 `json:"name,omitempty"`
+	AccountID    uuid.UUID              `json:"account_id,omitempty"`
+	Amount       decimal.Decimal        `json:"amount,omitempty"`
+	Type         models.TransactionType `json:"type,omitempty"`
+	IntervalType models.IntervalType    `json:"interval_type,omitempty"`
+	Interval     int                    `json:"interval,omitempty"`
+	CategoryID   uuid.UUID              `json:"category_id,omitempty"`
+	PlannedAt    time.Time              `json:"planned_date,omitempty"`
+	IsRecurring  *bool                  `json:"is_recurring,omitempty"`
 }
 
 func (r *PlannedOperationUpdate) Validate() error {
 	if r.Type != "" && !validTransactionType(r.Type) {
 		return errors.New("type")
 	}
-	if r.Frequency != "" && !validPlannedOperationFrequency(r.Frequency) {
-		return errors.New("frequency")
+	if r.IntervalType != "" && !validIntervalType(r.IntervalType) {
+		return errors.New("interval_type")
 	}
 	if r.Amount.IsNegative() {
 		return errors.New("amount")
@@ -79,23 +72,16 @@ func (r *PlannedOperationUpdate) Validate() error {
 	return nil
 }
 
-func validPlannedOperationFrequency(frequency PlannedOperationFrequency) bool {
-	switch frequency {
-	case PlannedOperationFrequencyDaily, PlannedOperationFrequencyWeekly, PlannedOperationFrequencyMonthly, PlannedOperationFrequencyYearly:
-		return true
-	default:
-		return false
-	}
-}
-
 type PlannedOperationResponse struct {
-	ID          uuid.UUID                 `json:"id" db:"id"`
-	Name        string                    `json:"name" db:"name"`
-	Account     AccountResponseShort      `json:"account" db:"account"`
-	Amount      decimal.Decimal           `json:"amount" db:"amount"`
-	Type        models.TransactionType    `json:"type" db:"type"`
-	Frequency   PlannedOperationFrequency `json:"frequency" db:"frequency"`
-	Category    CategoryResponse          `json:"category" db:"category"`
-	PlannedAt   time.Time                 `json:"planned_date" db:"planned_at"`
-	IsRecurring bool                      `json:"is_recurring" db:"is_recurring"`
+	ID           uuid.UUID              `json:"id" db:"id"`
+	Name         string                 `json:"name" db:"name"`
+	Account      AccountResponseShort   `json:"account" db:"account"`
+	Amount       decimal.Decimal        `json:"amount" db:"amount"`
+	Type         models.TransactionType `json:"type" db:"type"`
+	IntervalType models.IntervalType    `json:"interval_type" db:"interval_type"`
+	Interval     int                    `json:"interval" db:"interval"`
+	Category     CategoryResponse       `json:"category" db:"category"`
+	PlannedAt    time.Time              `json:"planned_date" db:"planned_at"`
+	NextRunAt    time.Time              `json:"next_run_date" db:"next_run_at"`
+	IsRecurring  bool                   `json:"is_recurring" db:"is_recurring"`
 }

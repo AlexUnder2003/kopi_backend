@@ -7,13 +7,12 @@ CREATE TABLE budgets (
     balance NUMERIC(19, 4) NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id),
     category_id UUID NOT NULL REFERENCES categories(id),
-
     currency currency_code NOT NULL,
     interval_type interval_type NOT NULL,
     "interval" INT,
     start_date DATE NOT NULL,
     reset_date DATE NOT NULL,
-
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

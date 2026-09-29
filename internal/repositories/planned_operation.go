@@ -16,8 +16,10 @@ const plannedOperationSelectColumns = `
 	p.name,
 	p.amount,
 	p.type,
-	p.frequency,
+	p.interval_type,
+	p."interval",
 	p.planned_at,
+	p.next_run_at,
 	p.is_recurring,
 	a.id AS "account.id",
 	a.name AS "account.name",
@@ -44,10 +46,10 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	const q = `
 		WITH inserted AS (
 			INSERT INTO planned_operations (
-				name, account_id, amount, type, frequency, category_id, planned_at, next_run_at, is_recurring
+				name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING id, name, account_id, amount, type, frequency, category_id, planned_at, is_recurring
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			RETURNING id, name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
 		)
 		SELECT ` + plannedOperationSelectColumns + `
 		FROM inserted p
@@ -57,7 +59,7 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	var resp dto.PlannedOperationResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		op.Name, op.AccountID, op.Amount, op.Type, op.Frequency,
+		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, op.Interval,
 		op.CategoryID, op.PlannedAt, op.NextRunAt, op.IsRecurring,
 	); err != nil {
 		return nil, err
@@ -65,16 +67,16 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	return &resp, nil
 }
 
-func (r *PlannedOperationRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.PlannedOperationResponse, error) {
+func (r *PlannedOperationRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto.PlannedOperationResponse, error) {
 	const q = `
 		SELECT ` + plannedOperationSelectColumns + `
 		FROM planned_operations p
 		JOIN accounts a ON a.id = p.account_id
 		JOIN categories c ON c.id = p.category_id
-		WHERE p.id = $1`
+		WHERE p.id = $1 AND a.user_id = $2`
 
 	var resp dto.PlannedOperationResponse
-	if err := sqlscan.Get(ctx, r.db, &resp, q, id); err != nil {
+	if err := sqlscan.Get(ctx, r.db, &resp, q, id, userID); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -105,15 +107,16 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 			UPDATE planned_operations
 			SET name = COALESCE($2, name),
 			    account_id = COALESCE($3, account_id),
-			    amount = COALESCE($4, amount),
+			    amount = COALESCE($4::numeric, amount),
 			    type = COALESCE($5::transaction_type, type),
-			    frequency = COALESCE($6::planned_operation_frequency, frequency),
-			    category_id = COALESCE($7, category_id),
-			    planned_at = COALESCE($8, planned_at),
-			    next_run_at = COALESCE($9, next_run_at),
-			    is_recurring = COALESCE($10::boolean, is_recurring)
+				    interval_type = COALESCE($6::interval_type, interval_type),
+			    "interval" = COALESCE($7::int, "interval"),
+			    category_id = COALESCE($8, category_id),
+			    planned_at = COALESCE($9::date, planned_at),
+			    next_run_at = COALESCE($10::date, next_run_at),
+			    is_recurring = COALESCE($11::boolean, is_recurring)
 			WHERE id = $1
-			RETURNING id, name, account_id, amount, type, frequency, category_id, planned_at, is_recurring
+			RETURNING id, name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
 		)
 		SELECT ` + plannedOperationSelectColumns + `
 		FROM updated p
@@ -128,10 +131,11 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 		nullUUID(op.AccountID),
 		nullDecimal(op.Amount),
 		nullString(string(op.Type)),
-		nullString(string(op.Frequency)),
+		nullString(string(op.IntervalType)),
+		nullInt(op.Interval),
 		nullUUID(op.CategoryID),
 		nullTime(op.PlannedAt),
-		nullTimePtr(op.NextRunAt),
+		nullTime(op.NextRunAt),
 		nullBoolPtr(op.IsRecurring),
 	); err != nil {
 		return nil, err

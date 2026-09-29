@@ -51,6 +51,7 @@ type BudgetUpdate struct {
 	StartDate    time.Time           `json:"start_date,omitempty"`
 	IntervalType models.IntervalType `json:"interval_type,omitempty"`
 	Interval     int                 `json:"interval,omitempty"`
+	IsActive     *bool               `json:"is_active,omitempty"`
 }
 
 func (r *BudgetUpdate) Validate() error {
@@ -69,15 +70,6 @@ func (r *BudgetUpdate) Validate() error {
 	return nil
 }
 
-func validIntervalType(intervalType models.IntervalType) bool {
-	switch intervalType {
-	case models.IntervalTypeDaily, models.IntervalTypeWeekly, models.IntervalTypeBiweekly, models.IntervalTypeMonthly, models.IntervalTypeCustom:
-		return true
-	default:
-		return false
-	}
-}
-
 type BudgetResponse struct {
 	ID           uuid.UUID           `json:"id" db:"id"`
 	Name         string              `json:"name" db:"name"`
@@ -88,5 +80,6 @@ type BudgetResponse struct {
 	Currency     string              `json:"currency" db:"currency"`
 	StartDate    time.Time           `json:"start_date" db:"start_date"`
 	ResetDate    time.Time           `json:"reset_date" db:"reset_date"`
+	IsActive     bool                `json:"is_active" db:"is_active"`
 	Category     CategoryResponse    `json:"category" db:"category"`
 }

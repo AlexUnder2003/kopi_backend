@@ -1,15 +1,14 @@
-CREATE TYPE planned_operation_frequency AS ENUM ('daily', 'weekly', 'biweekly', 'monthly');
-
 CREATE TABLE planned_operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     account_id UUID NOT NULL REFERENCES accounts(id),
     amount NUMERIC(19, 4) NOT NULL,
     type transaction_type NOT NULL,
-    frequency planned_operation_frequency NOT NULL,
+    interval_type interval_type NOT NULL,
+    "interval" INT NOT NULL,
     category_id UUID NOT NULL REFERENCES categories(id),
     planned_at DATE NOT NULL,
-    next_run_at DATE,
+    next_run_at DATE NOT NULL,
     is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

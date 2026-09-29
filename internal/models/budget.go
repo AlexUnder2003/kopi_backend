@@ -29,4 +29,5 @@ type Budget struct {
 	StartDate    time.Time       `db:"start_date"`
 	ResetDate    time.Time       `db:"reset_date"`
 	CategoryID   uuid.UUID       `db:"category_id"`
+	IsActive     *bool           `db:"is_active"`
 }

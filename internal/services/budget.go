@@ -47,7 +47,7 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		IntervalType: budget.IntervalType,
 		Interval:     budget.Interval,
 		StartDate:    budget.StartDate,
-		ResetDate:    s.CalculateResetDate(ctx, budget.StartDate, budget.IntervalType, budget.Interval),
+		ResetDate:    NextDate(budget.StartDate, budget.IntervalType, budget.Interval),
 		Currency:     budget.Currency,
 		CategoryID:   budget.CategoryID,
 	}
@@ -99,21 +99,25 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 	}
 
 	budgetModel := &models.Budget{
-		ID:     existingBudget.ID,
-		Name:   budget.Name,
-		Amount: budget.Amount,
+		ID:       existingBudget.ID,
+		Name:     budget.Name,
+		Amount:   budget.Amount,
+		IsActive: budget.IsActive,
 	}
 
-	if budget.IntervalType != existingBudget.IntervalType || budget.IntervalType == models.IntervalTypeCustom {
-		if budget.IntervalType == models.IntervalTypeCustom {
-			budgetModel.StartDate = budget.StartDate
-			budgetModel.Interval = budget.Interval
-		} else {
-			budgetModel.StartDate = s.CalculateStartDate()
+	if budgetScheduleChanged(budget) {
+		intervalType := effectiveIntervalType(budget.IntervalType, existingBudget.IntervalType)
+		interval := effectiveInterval(budget.Interval, existingInterval(existingBudget.Interval))
+		startDate := effectiveTime(budget.StartDate, existingBudget.StartDate)
+
+		if intervalType != models.IntervalTypeCustom {
+			startDate = s.CalculateStartDate()
 		}
 
-		budgetModel.IntervalType = budget.IntervalType
-		budgetModel.ResetDate = s.CalculateResetDate(ctx, budgetModel.StartDate, budget.IntervalType, budgetModel.Interval)
+		budgetModel.IntervalType = intervalType
+		budgetModel.Interval = interval
+		budgetModel.StartDate = startDate
+		budgetModel.ResetDate = NextDate(startDate, intervalType, interval)
 	}
 
 	updated, err := s.budgetRepo.Update(ctx, budgetModel)
@@ -153,16 +157,10 @@ func (s *BudgetService) Reset(ctx context.Context) error {
 
 	budgetModels := make([]models.Budget, len(budgets))
 	for i, budget := range budgets {
-		var interval int
-
-		if budget.Interval != nil {
-			interval = *budget.Interval
-		}
-
 		budgetModels[i] = models.Budget{
 			ID:        budget.ID,
 			Balance:   budget.Amount,
-			ResetDate: s.CalculateResetDate(ctx, budget.ResetDate, budget.IntervalType, interval),
+			ResetDate: NextDate(budget.ResetDate, budget.IntervalType, existingInterval(budget.Interval)),
 		}
 	}
 
@@ -174,29 +172,15 @@ func (s *BudgetService) Reset(ctx context.Context) error {
 	return nil
 }
 
-func (s *BudgetService) CalculateResetDate(ctx context.Context, date time.Time, intervalType models.IntervalType, interval int) time.Time {
-	var resetDate time.Time
+func budgetScheduleChanged(budget *dto.BudgetUpdate) bool {
+	return budget.IntervalType != "" || budget.Interval != 0 || !budget.StartDate.IsZero()
+}
 
-	now := time.Now()
-
-	for {
-		switch intervalType {
-		case models.IntervalTypeDaily:
-			resetDate = date.AddDate(0, 0, 1)
-		case models.IntervalTypeWeekly:
-			resetDate = date.AddDate(0, 0, 7)
-		case models.IntervalTypeBiweekly:
-			resetDate = date.AddDate(0, 0, 14)
-		case models.IntervalTypeMonthly:
-			resetDate = date.AddDate(0, 1, 0)
-		case models.IntervalTypeCustom:
-			resetDate = date.AddDate(0, 0, interval)
-		}
-		if resetDate.After(now) {
-			return resetDate
-		}
-		date = resetDate
+func existingInterval(interval *int) int {
+	if interval == nil {
+		return 0
 	}
+	return *interval
 }
 
 func (s *BudgetService) CalculateStartDate() time.Time {
