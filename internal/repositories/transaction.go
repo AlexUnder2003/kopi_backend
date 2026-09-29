@@ -151,6 +151,51 @@ func (r *TransactionRepository) Update(ctx context.Context, txModel *models.Tran
 	return &resp, nil
 }
 
+func (r *TransactionRepository) BulkCreate(ctx context.Context, transactions []models.Transaction, tx *sql.Tx) error {
+	if len(transactions) == 0 {
+		return nil
+	}
+
+	names := make([]string, len(transactions))
+	types := make([]string, len(transactions))
+	accountIDs := make([]string, len(transactions))
+	fromAccountIDs := make([]string, len(transactions))
+	categoryIDs := make([]string, len(transactions))
+	amounts := make([]string, len(transactions))
+	occurrenceDates := make([]string, len(transactions))
+
+	for i, transaction := range transactions {
+		names[i] = transaction.Name
+		types[i] = string(transaction.Type)
+		accountIDs[i] = transaction.AccountID.String()
+		if transaction.FromAccountID != uuid.Nil {
+			fromAccountIDs[i] = transaction.FromAccountID.String()
+		}
+		categoryIDs[i] = transaction.CategoryID.String()
+		amounts[i] = transaction.Amount.String()
+		occurrenceDates[i] = transaction.OccurrenceDate.Format(time.DateOnly)
+	}
+
+	const q = `
+		INSERT INTO transactions (name, type, account_id, from_account_id, category_id, amount, occurrence_date)
+		SELECT
+			v.name,
+			v.type::transaction_type,
+			v.account_id::uuid,
+			NULLIF(v.from_account_id, '')::uuid,
+			v.category_id::uuid,
+			v.amount::numeric,
+			v.occurrence_date::date
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
+			AS v(name, type, account_id, from_account_id, category_id, amount, occurrence_date)`
+
+	_, err := DBorTx(r.db, tx).ExecContext(
+		ctx, q,
+		names, types, accountIDs, fromAccountIDs, categoryIDs, amounts, occurrenceDates,
+	)
+	return err
+}
+
 func (r *TransactionRepository) Delete(ctx context.Context, id uuid.UUID, tx *sql.Tx) error {
 	const q = `DELETE FROM transactions WHERE id = $1`
 

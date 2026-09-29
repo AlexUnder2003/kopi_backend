@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
@@ -141,6 +142,47 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 		return nil, err
 	}
 	return &resp, nil
+}
+
+func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time) ([]dto.PlannedOperationResponse, error) {
+	const q = `
+		SELECT ` + plannedOperationSelectColumns + `
+		FROM planned_operations p
+		JOIN accounts a ON a.id = p.account_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE p.next_run_at <= $1
+		ORDER BY p.next_run_at
+		FOR UPDATE SKIP LOCKED`
+	var resp []dto.PlannedOperationResponse
+	if err := sqlscan.Select(ctx, r.db, &resp, q, nextRunAt); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (r *PlannedOperationRepository) BulkUpdate(ctx context.Context, ops []models.PlannedOperation, tx *sql.Tx) error {
+	if len(ops) == 0 {
+		return nil
+	}
+
+	ids := make([]string, len(ops))
+	nextRunAts := make([]string, len(ops))
+
+	for i, op := range ops {
+		ids[i] = op.ID.String()
+		if !op.NextRunAt.IsZero() {
+			nextRunAts[i] = op.NextRunAt.Format(time.DateOnly)
+		}
+	}
+
+	const q = `
+		UPDATE planned_operations AS p
+		SET next_run_at = NULLIF(v.next_run_at, '')::date
+		FROM unnest($1::text[], $2::text[]) AS v(id, next_run_at)
+		WHERE p.id = v.id::uuid`
+
+	_, err := DBorTx(r.db, tx).ExecContext(ctx, q, ids, nextRunAts)
+	return err
 }
 
 func (r *PlannedOperationRepository) Delete(ctx context.Context, id uuid.UUID) error {

@@ -82,6 +82,6 @@ type PlannedOperationResponse struct {
 	Interval     int                    `json:"interval" db:"interval"`
 	Category     CategoryResponse       `json:"category" db:"category"`
 	PlannedAt    time.Time              `json:"planned_date" db:"planned_at"`
-	NextRunAt    time.Time              `json:"next_run_date" db:"next_run_at"`
+	NextRunAt    *time.Time             `json:"next_run_date" db:"next_run_at"`
 	IsRecurring  bool                   `json:"is_recurring" db:"is_recurring"`
 }

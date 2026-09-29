@@ -59,8 +59,12 @@ func NewApp() *App {
 		handlers.NewPlannedOperationHandler(plannedOperationService),
 	}
 	router := routes.Router(hs)
+
 	budgetWorker := workers.NewBudgetWorker(budgetService)
-	return &App{config: cfg, router: router, db: database, workers: []Worker{budgetWorker}}
+	plannedOperationsWorker := workers.NewPlannedOperationsWorker(plannedOperationService)
+	workers := []Worker{budgetWorker, plannedOperationsWorker}
+
+	return &App{config: cfg, router: router, db: database, workers: workers}
 }
 
 func (a *App) Run() {

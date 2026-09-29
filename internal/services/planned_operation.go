@@ -18,14 +18,18 @@ import (
 const errMsgPlannedOperationNotFound = "not_found_planned_operation"
 
 type PlannedOperationService struct {
+	db                   *sql.DB
 	plannedOperationRepo *repositories.PlannedOperationRepository
+	transactionRepo      *repositories.TransactionRepository
 	accountService       *AccountService
 	logger               *zap.SugaredLogger
 }
 
 func NewPlannedOperationService(db *sql.DB, accountService *AccountService, logger *zap.SugaredLogger) *PlannedOperationService {
 	return &PlannedOperationService{
+		db:                   db,
 		plannedOperationRepo: repositories.NewPlannedOperationRepository(db),
+		transactionRepo:      repositories.NewTransactionRepository(db),
 		accountService:       accountService,
 		logger:               logger,
 	}
@@ -129,6 +133,69 @@ func (s *PlannedOperationService) Delete(ctx context.Context, id, userID uuid.UU
 
 	if err := s.plannedOperationRepo.Delete(ctx, id); err != nil {
 		s.logger.Errorw("failed to delete planned operation", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	return nil
+}
+
+func (s *PlannedOperationService) Execute(ctx context.Context) error {
+	ops, err := s.plannedOperationRepo.GetByNextRunAt(ctx, time.Now())
+	if err != nil {
+		s.logger.Errorw("failed to get planned operations by next run at", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if len(ops) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	var transactions []models.Transaction
+
+	for _, op := range ops {
+		transactions = append(transactions, models.Transaction{
+			Name:           op.Name,
+			Type:           op.Type,
+			AccountID:      op.Account.ID,
+			Amount:         op.Amount,
+			OccurrenceDate: op.PlannedAt,
+			CategoryID:     op.Category.ID,
+		})
+	}
+
+	if err := s.transactionRepo.BulkCreate(ctx, transactions, tx); err != nil {
+		s.logger.Errorw("failed to bulk create transactions", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	var updatedOps []models.PlannedOperation
+	for _, op := range ops {
+		if op.IsRecurring {
+			updatedOps = append(updatedOps, models.PlannedOperation{
+				ID:        op.ID,
+				NextRunAt: nextRunAt(*op.NextRunAt, op.IntervalType, op.Interval),
+			})
+		} else {
+			updatedOps = append(updatedOps, models.PlannedOperation{
+				ID: op.ID,
+			})
+		}
+	}
+
+	if err := s.plannedOperationRepo.BulkUpdate(ctx, updatedOps, tx); err != nil {
+		s.logger.Errorw("failed to bulk update planned operations", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 

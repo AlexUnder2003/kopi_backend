@@ -115,18 +115,18 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 			FROM updated b
 			JOIN categories c ON c.id = b.category_id`
 
-		var resp dto.BudgetResponse
-		if err := sqlscan.Get(
-			ctx, r.db, &resp, q,
-			budget.ID,
-			nullString(budget.Name),
-			nullDecimal(budget.Amount),
-			nullString(string(budget.IntervalType)),
-			nullInt(budget.Interval),
-			nullTime(budget.StartDate),
-			nullTime(budget.ResetDate),
-			nullBoolPtr(budget.IsActive),
-		); err != nil {
+	var resp dto.BudgetResponse
+	if err := sqlscan.Get(
+		ctx, r.db, &resp, q,
+		budget.ID,
+		nullString(budget.Name),
+		nullDecimal(budget.Amount),
+		nullString(string(budget.IntervalType)),
+		nullInt(budget.Interval),
+		nullTime(budget.StartDate),
+		nullTime(budget.ResetDate),
+		nullBoolPtr(budget.IsActive),
+	); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -137,7 +137,7 @@ func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, category
 		SELECT id
 		FROM budgets
 		WHERE user_id = $1 AND category_id = $2
-		FOR UPDATE`
+		FOR UPDATE SKIP LOCKED`
 
 	var id uuid.UUID
 	if err := tx.QueryRowContext(ctx, q, userID, categoryID).Scan(&id); err != nil {
@@ -192,7 +192,8 @@ func (r *BudgetRepository) GetByResetDate(ctx context.Context, resetDate time.Ti
 		SELECT ` + budgetSelectColumns + `
 		FROM budgets b
 		JOIN categories c ON c.id = b.category_id
-		WHERE b.reset_date <= $1`
+		WHERE b.reset_date <= $1 AND b.is_active = TRUE
+		FOR UPDATE SKIP LOCKED`
 	var resp []dto.BudgetResponse
 	if err := sqlscan.Select(ctx, r.db, &resp, q, resetDate); err != nil {
 		return nil, err

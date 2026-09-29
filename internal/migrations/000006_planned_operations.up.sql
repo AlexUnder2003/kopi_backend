@@ -8,7 +8,7 @@ CREATE TABLE planned_operations (
     "interval" INT NOT NULL,
     category_id UUID NOT NULL REFERENCES categories(id),
     planned_at DATE NOT NULL,
-    next_run_at DATE NOT NULL,
+    next_run_at DATE,
     is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
