@@ -108,8 +108,8 @@ func (r *TransactionRepository) List(ctx context.Context, params TransactionList
 		nullUUID(params.CategoryID),
 		nullTime(params.StartDate),
 		nullTime(params.EndDate),
-		params.Limit,
-		params.Offset,
+		nullInt(params.Limit),
+		nullInt(params.Offset),
 	); err != nil {
 		return nil, err
 	}

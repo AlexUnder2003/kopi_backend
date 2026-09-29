@@ -5,7 +5,7 @@ import (
 	"slices"
 )
 
-func validCurrency(currency string) bool {
+func ValidCurrency(currency string) bool {
 	return slices.Contains(models.CurrencyCodes, models.CurrencyCode(currency))
 }
 

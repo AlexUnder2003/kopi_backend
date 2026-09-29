@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/middleware"
@@ -59,7 +60,7 @@ func (h *PlannedOperationHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.plannedOperationService.List(c.Request().Context(), userID)
+	resp, err := h.plannedOperationService.List(c.Request().Context(), userID, time.Time{}, time.Time{})
 	if err != nil {
 		return mapAppError(err)
 	}

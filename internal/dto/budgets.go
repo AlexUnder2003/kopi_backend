@@ -36,7 +36,7 @@ func (r *BudgetPost) Validate() error {
 	if r.CategoryID == uuid.Nil {
 		return errors.New("category_id")
 	}
-	if !validCurrency(r.Currency) {
+	if !ValidCurrency(r.Currency) {
 		return errors.New("currency")
 	}
 	if r.IntervalType == models.IntervalTypeCustom && r.StartDate.IsZero() {

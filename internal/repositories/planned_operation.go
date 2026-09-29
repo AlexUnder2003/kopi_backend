@@ -37,6 +37,8 @@ type PlannedOperationRepository struct {
 type PlannedOperationListParams struct {
 	AccountID uuid.UUID
 	UserID    uuid.UUID
+	StartDate time.Time
+	EndDate   time.Time
 }
 
 func NewPlannedOperationRepository(db *sql.DB) *PlannedOperationRepository {
@@ -90,12 +92,15 @@ func (r *PlannedOperationRepository) List(ctx context.Context, params PlannedOpe
 		JOIN accounts a ON a.id = p.account_id
 		JOIN categories c ON c.id = p.category_id
 		WHERE (a.user_id = $1 OR $1 IS NULL) AND (p.account_id = $2 OR $2 IS NULL)
+			AND (p.next_run_at >= $3 OR $3 IS NULL) AND (p.next_run_at <= $4 OR $4 IS NULL)
 		ORDER BY p.planned_at`
 
 	var resp []dto.PlannedOperationResponse
 	if err := sqlscan.Select(ctx, r.db, &resp, q,
 		nullUUID(params.UserID),
 		nullUUID(params.AccountID),
+		nullTime(params.StartDate),
+		nullTime(params.EndDate),
 	); err != nil {
 		return nil, err
 	}

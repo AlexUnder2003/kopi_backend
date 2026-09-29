@@ -49,6 +49,7 @@ func NewApp() *App {
 	transactionService := services.NewTransactionService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
+	dashboardService := services.NewDashboardService(cfg, accountService, transactionService, budgetService, plannedOperationService)
 
 	hs := []routes.Handler{
 		handlers.NewUserHandler(userService),
@@ -57,6 +58,7 @@ func NewApp() *App {
 		handlers.NewTransactionHandler(transactionService),
 		handlers.NewBudgetHandler(budgetService),
 		handlers.NewPlannedOperationHandler(plannedOperationService),
+		handlers.NewDashboardHandler(dashboardService),
 	}
 	router := routes.Router(hs)
 

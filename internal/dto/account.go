@@ -24,7 +24,7 @@ func (r *AccountPost) Validate() error {
 	if r.Currency == "" {
 		return errors.New("currency")
 	}
-	if !validCurrency(r.Currency) {
+	if !ValidCurrency(r.Currency) {
 		return errors.New("currency")
 	}
 	if !r.Balance.IsPositive() {
