@@ -118,7 +118,7 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 		model.NextRunAt = nextRunAt(
 			effectiveTime(op.PlannedAt, existing.PlannedAt),
 			effectiveIntervalType(op.IntervalType, existing.IntervalType),
-			effectiveInterval(op.Interval, existing.Interval),
+			effectiveInterval(op.Interval, existingInterval(existing.Interval)),
 		)
 	}
 
@@ -198,7 +198,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 		if op.IsRecurring {
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
-				NextRunAt: nextRunAt(*op.NextRunAt, op.IntervalType, op.Interval),
+				NextRunAt: nextRunAt(*op.NextRunAt, op.IntervalType, existingInterval(op.Interval)),
 			})
 		} else {
 			updatedOps = append(updatedOps, models.PlannedOperation{

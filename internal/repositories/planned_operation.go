@@ -62,7 +62,7 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	var resp dto.PlannedOperationResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, op.Interval,
+		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullInt(op.Interval),
 		op.CategoryID, op.PlannedAt, op.NextRunAt, op.IsRecurring,
 	); err != nil {
 		return nil, err

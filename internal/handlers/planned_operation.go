@@ -142,6 +142,8 @@ func mapPlannedOperationValidationErrors(err error) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_planned_operation_type")
 	case "interval_type":
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_planned_operation_interval_type")
+	case "interval":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_planned_operation_interval")
 	case "account_id":
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_planned_operation_account_id")
 	case "category_id":

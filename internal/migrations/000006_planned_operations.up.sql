@@ -5,7 +5,7 @@ CREATE TABLE planned_operations (
     amount NUMERIC(19, 4) NOT NULL,
     type transaction_type NOT NULL,
     interval_type interval_type NOT NULL,
-    "interval" INT NOT NULL,
+    "interval" INT,
     category_id UUID NOT NULL REFERENCES categories(id),
     planned_at DATE NOT NULL,
     next_run_at DATE,
