@@ -66,7 +66,7 @@ func (r *TransactionRepository) Create(ctx context.Context, txModel *models.Tran
 	var resp dto.TransactionResponseTransfer
 	if err := sqlscan.Get(
 		ctx, DBorTx(r.db, tx), &resp, q,
-		txModel.Name, txModel.Type, txModel.AccountID, nullUUID(txModel.FromAccountID), txModel.CategoryID, txModel.Amount, txModel.OccurrenceDate,
+		txModel.Name, txModel.Type, txModel.AccountID, nullUUIDPtr(txModel.FromAccountID), txModel.CategoryID, txModel.Amount, txModel.OccurrenceDate,
 	); err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (r *TransactionRepository) Update(ctx context.Context, txModel *models.Tran
 		nullString(txModel.Name),
 		nullString(string(txModel.Type)),
 		nullUUID(txModel.AccountID),
-		nullUUID(txModel.FromAccountID),
+		nullUUIDPtr(txModel.FromAccountID),
 		nullUUID(txModel.CategoryID),
 		nullDecimal(txModel.Amount),
 		nullTime(txModel.OccurrenceDate),
@@ -168,7 +168,7 @@ func (r *TransactionRepository) BulkCreate(ctx context.Context, transactions []m
 		names[i] = transaction.Name
 		types[i] = string(transaction.Type)
 		accountIDs[i] = transaction.AccountID.String()
-		if transaction.FromAccountID != uuid.Nil {
+		if transaction.FromAccountID != nil && *transaction.FromAccountID != uuid.Nil {
 			fromAccountIDs[i] = transaction.FromAccountID.String()
 		}
 		categoryIDs[i] = transaction.CategoryID.String()

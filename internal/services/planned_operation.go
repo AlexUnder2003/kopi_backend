@@ -52,10 +52,10 @@ func (s *PlannedOperationService) Create(ctx context.Context, userID uuid.UUID, 
 		Amount:       op.Amount,
 		Type:         op.Type,
 		IntervalType: op.IntervalType,
-		Interval:     op.Interval,
+		Interval:     intervalPtr(op.Interval),
 		CategoryID:   op.CategoryID,
 		PlannedAt:    op.PlannedAt,
-		NextRunAt:    nextRunAt(op.PlannedAt, op.IntervalType, op.Interval),
+		NextRunAt:    timePtr(nextRunAt(op.PlannedAt, op.IntervalType, op.Interval)),
 		IsRecurring:  &isRecurring,
 	}
 
@@ -108,18 +108,18 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 		Amount:       op.Amount,
 		Type:         op.Type,
 		IntervalType: op.IntervalType,
-		Interval:     op.Interval,
+		Interval:     intervalPtr(op.Interval),
 		CategoryID:   op.CategoryID,
 		PlannedAt:    op.PlannedAt,
 		IsRecurring:  op.IsRecurring,
 	}
 
 	if scheduleChanged(op) {
-		model.NextRunAt = nextRunAt(
+		model.NextRunAt = timePtr(nextRunAt(
 			effectiveTime(op.PlannedAt, existing.PlannedAt),
 			effectiveIntervalType(op.IntervalType, existing.IntervalType),
 			effectiveInterval(op.Interval, existingInterval(existing.Interval)),
-		)
+		))
 	}
 
 	updated, err := s.plannedOperationRepo.Update(ctx, model)
@@ -198,7 +198,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 		if op.IsRecurring {
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
-				NextRunAt: nextRunAt(*op.NextRunAt, op.IntervalType, existingInterval(op.Interval)),
+				NextRunAt: timePtr(nextRunAt(*op.NextRunAt, op.IntervalType, existingInterval(op.Interval))),
 			})
 		} else {
 			updatedOps = append(updatedOps, models.PlannedOperation{

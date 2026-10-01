@@ -56,7 +56,7 @@ func (h *TransactionHandler) Create(c *echo.Context) error {
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
-		FromAccountID:  req.FromAccountID,
+		FromAccountID:  uuidPtr(req.FromAccountID),
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -130,7 +130,7 @@ func (h *TransactionHandler) Update(c *echo.Context) error {
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
-		FromAccountID:  req.FromAccountID,
+		FromAccountID:  uuidPtr(req.FromAccountID),
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -212,6 +212,13 @@ func transactionListParams(c *echo.Context) (repositories.TransactionListParams,
 	}
 
 	return params, nil
+}
+
+func uuidPtr(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
 }
 
 func parseTransactionDate(value string) (time.Time, error) {

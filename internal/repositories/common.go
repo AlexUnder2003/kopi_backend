@@ -28,6 +28,13 @@ func nullInt(n int) any {
 	return n
 }
 
+func nullIntPtr(n *int) any {
+	if n == nil || *n == 0 {
+		return nil
+	}
+	return *n
+}
+
 func nullString(s string) any {
 	if s == "" {
 		return nil
@@ -40,6 +47,13 @@ func nullUUID(id uuid.UUID) any {
 		return nil
 	}
 	return id
+}
+
+func nullUUIDPtr(id *uuid.UUID) any {
+	if id == nil || *id == uuid.Nil {
+		return nil
+	}
+	return *id
 }
 
 func nullDecimal(d decimal.Decimal) any {

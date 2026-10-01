@@ -62,8 +62,8 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	var resp dto.PlannedOperationResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullInt(op.Interval),
-		op.CategoryID, op.PlannedAt, op.NextRunAt, op.IsRecurring,
+		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullIntPtr(op.Interval),
+		op.CategoryID, op.PlannedAt, nullTimePtr(op.NextRunAt), op.IsRecurring,
 	); err != nil {
 		return nil, err
 	}
@@ -138,10 +138,10 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 		nullDecimal(op.Amount),
 		nullString(string(op.Type)),
 		nullString(string(op.IntervalType)),
-		nullInt(op.Interval),
+		nullIntPtr(op.Interval),
 		nullUUID(op.CategoryID),
 		nullTime(op.PlannedAt),
-		nullTime(op.NextRunAt),
+		nullTimePtr(op.NextRunAt),
 		nullBoolPtr(op.IsRecurring),
 	); err != nil {
 		return nil, err
@@ -176,7 +176,7 @@ func (r *PlannedOperationRepository) BulkUpdate(ctx context.Context, ops []model
 
 	for i, op := range ops {
 		ids[i] = op.ID.String()
-		if !op.NextRunAt.IsZero() {
+		if op.NextRunAt != nil && !op.NextRunAt.IsZero() {
 			nextRunAts[i] = op.NextRunAt.Format(time.DateOnly)
 		}
 	}

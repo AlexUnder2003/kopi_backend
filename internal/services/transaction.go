@@ -59,7 +59,7 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, trans
 		tx,
 		transaction.Type,
 		transaction.AccountID,
-		transaction.FromAccountID,
+		uuidValue(transaction.FromAccountID),
 		transaction.CategoryID,
 		userID,
 		transaction.Amount,
@@ -245,6 +245,13 @@ func (s *TransactionService) applyEffects(
 	}
 
 	return nil
+}
+
+func uuidValue(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }
 
 func signed(txType models.TransactionType, amount decimal.Decimal) decimal.Decimal {

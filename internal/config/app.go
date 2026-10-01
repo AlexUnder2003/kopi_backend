@@ -20,9 +20,7 @@ type AppConfig struct {
 }
 
 func NewAppConfig(logger *zap.SugaredLogger) (*AppConfig, error) {
-	err := godotenv.Load()
-
-	if err != nil {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		logger.Errorf("Error loading .env file: %v", err)
 		return nil, err
 	}

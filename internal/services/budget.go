@@ -45,10 +45,10 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		UserID:       userID,
 		Amount:       budget.Amount,
 		IntervalType: budget.IntervalType,
-		Interval:     budget.Interval,
+		Interval:     intervalPtr(budget.Interval),
 		StartDate:    budget.StartDate,
 		ResetDate:    NextDate(budget.StartDate, budget.IntervalType, budget.Interval),
-		Currency:     budget.Currency,
+		Currency:     models.CurrencyCode(budget.Currency),
 		CategoryID:   budget.CategoryID,
 	}
 
@@ -115,7 +115,7 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 		}
 
 		budgetModel.IntervalType = intervalType
-		budgetModel.Interval = interval
+		budgetModel.Interval = intervalPtr(interval)
 		budgetModel.StartDate = startDate
 		budgetModel.ResetDate = NextDate(startDate, intervalType, interval)
 	}

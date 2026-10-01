@@ -55,3 +55,17 @@ func effectiveInterval(updated, existing int) int {
 	}
 	return updated
 }
+
+func intervalPtr(n int) *int {
+	if n == 0 {
+		return nil
+	}
+	return &n
+}
+
+func timePtr(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}

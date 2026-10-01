@@ -10,16 +10,16 @@ type CurrencyCode string
 const (
 	CurrencyCodeUSD CurrencyCode = "USD"
 	CurrencyCodeEUR CurrencyCode = "EUR"
-	CurrencyCodeGBP CurrencyCode = "RUB"
-	CurrencyCodeJPY CurrencyCode = "KZT"
+	CurrencyCodeRUB CurrencyCode = "RUB"
+	CurrencyCodeKZT CurrencyCode = "KZT"
 	CurrencyCodeBYN CurrencyCode = "BYN"
 )
 
 var CurrencyCodes = []CurrencyCode{
 	CurrencyCodeUSD,
 	CurrencyCodeEUR,
-	CurrencyCodeGBP,
-	CurrencyCodeJPY,
+	CurrencyCodeRUB,
+	CurrencyCodeKZT,
 	CurrencyCodeBYN,
 }
 
