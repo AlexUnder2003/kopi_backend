@@ -20,7 +20,7 @@ func UserMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if accessToken == "" {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "access token is required",
+				"message": "unauthorized",
 			})
 		}
 
@@ -30,28 +30,28 @@ func UserMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		if err != nil || !token.Valid {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "invalid access token",
+				"message": "unauthorized",
 			})
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "invalid access token",
+				"message": "unauthorized",
 			})
 		}
 
 		sub, err := claims.GetSubject()
 		if err != nil || sub == "" {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "invalid access token",
+				"message": "unauthorized",
 			})
 		}
 
 		userID, err := uuid.Parse(sub)
 		if err != nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{
-				"error": "invalid access token",
+				"message": "unauthorized",
 			})
 		}
 
