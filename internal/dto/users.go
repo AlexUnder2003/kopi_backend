@@ -48,6 +48,13 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+func (r *RefreshTokenRequest) Validate() error {
+	if r.RefreshToken == "" {
+		return errors.New("refresh_token is required")
+	}
+	return nil
+}
+
 type RefreshTokenResponse struct {
 	AccessToken string `json:"access_token"`
 }

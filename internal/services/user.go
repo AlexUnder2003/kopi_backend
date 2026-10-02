@@ -219,6 +219,20 @@ func (s *UserService) Refresh(ctx context.Context, refreshToken string) (*dto.Re
 	}, nil
 }
 
+func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
+	refreshTokenHash := sha256.Sum256([]byte(refreshToken))
+	userToken, err := s.userTokenRepo.GetByTokenHash(ctx, hex.EncodeToString(refreshTokenHash[:]))
+	if err != nil {
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.userTokenRepo.Delete(ctx, userToken.ID); err != nil {
+		s.logger.Errorw("failed to delete user token", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
+}
+
 func (s *UserService) Create(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
 	created, err := s.userRepo.Create(ctx, user)
 	if err != nil {

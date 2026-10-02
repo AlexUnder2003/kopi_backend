@@ -8,6 +8,7 @@ import (
 	"KopiBackend/internal/models"
 
 	"github.com/georgysavva/scany/v2/sqlscan"
+	"github.com/google/uuid"
 )
 
 const userTokenColumns = `id, user_id, token_hash, expires_at`
@@ -51,4 +52,14 @@ func (r *UserTokenRepository) DeleteExpired(ctx context.Context, before time.Tim
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func (r *UserTokenRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	const q = `DELETE FROM user_tokens WHERE id = $1`
+
+	_, err := r.db.ExecContext(ctx, q, id)
+	if err != nil {
+		return err
+	}
+	return nil
 }

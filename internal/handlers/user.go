@@ -23,6 +23,7 @@ func (h *UserHandler) Register(g *echo.Group) {
 	auth := g.Group("/auth")
 	auth.POST("/otp", h.SendOTP)
 	auth.POST("/login", h.Login)
+	auth.POST("/logout", h.Logout)
 
 	users := g.Group("/users")
 	users.Use(middleware.UserMiddleware)
@@ -60,6 +61,22 @@ func (h *UserHandler) Login(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *UserHandler) Logout(c *echo.Context) error {
+	var req dto.RefreshTokenRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
+	}
+	if err := req.Validate(); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if err := h.userService.Logout(c.Request().Context(), req.RefreshToken); err != nil {
+		return mapAppError(err)
+	}
+
+	return c.NoContent(http.StatusCreated)
 }
 
 func (h *UserHandler) GetMe(c *echo.Context) error {
