@@ -17,7 +17,6 @@ type AppConfig struct {
 	SMTPUser       string
 	SMTPPassword   string
 	SMTPFrom       string
-	Development    bool
 }
 
 func NewAppConfig(logger *zap.SugaredLogger) (*AppConfig, error) {
@@ -36,6 +35,5 @@ func NewAppConfig(logger *zap.SugaredLogger) (*AppConfig, error) {
 		SMTPUser:       os.Getenv("SMTP_USER"),
 		SMTPPassword:   os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:       os.Getenv("SMTP_FROM"),
-		Development:    os.Getenv("DEVELOPMENT") == "true",
 	}, nil
 }

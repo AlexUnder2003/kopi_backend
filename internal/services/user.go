@@ -24,14 +24,12 @@ import (
 )
 
 const (
-	errMsgUserNotFound             = "not_found_user"
-	errMsgInvalidOTP               = "invalid_otp"
-	errMsgRefreshTokenExpired      = "refresh_token_expired"
-	errMsgUnauthorized             = "unauthorized"
-	developAccessTokenLifetime     = 10 * time.Minute
-	developRefreshTokenLifetime    = 15 * time.Minute
-	productionAccessTokenLifetime  = 30 * time.Minute
-	productionRefreshTokenLifetime = 90 * 12 * time.Hour
+	errMsgUserNotFound        = "not_found_user"
+	errMsgInvalidOTP          = "invalid_otp"
+	errMsgRefreshTokenExpired = "refresh_token_expired"
+	errMsgUnauthorized        = "unauthorized"
+	accessTokenLifetime       = 30 * time.Minute
+	refreshTokenLifetime      = 90 * 12 * time.Hour
 )
 
 type UserService struct {
@@ -50,30 +48,21 @@ func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.Sugared
 }
 
 func (s *UserService) generateJWTTokens(userId uuid.UUID) (string, string, error) {
-	accessTokenLifetime := developAccessTokenLifetime
-
-	if !s.appConfig.Development {
-		accessTokenLifetime = productionAccessTokenLifetime
-	}
-
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userId,
 		"exp": time.Now().Add(accessTokenLifetime).Unix(),
 	}).SignedString([]byte(s.appConfig.SecretKey))
+
 	if err != nil {
 		s.logger.Errorw("failed to create access token", "error", err)
 		return "", "", apperrors.Internal(errInternalServerError)
-	}
-
-	refreshTokenLifetime := developRefreshTokenLifetime
-	if !s.appConfig.Development {
-		refreshTokenLifetime = productionRefreshTokenLifetime
 	}
 
 	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userId,
 		"exp": time.Now().Add(refreshTokenLifetime).Unix(),
 	}).SignedString([]byte(s.appConfig.SecretKey))
+
 	if err != nil {
 		s.logger.Errorw("failed to create refresh token", "error", err)
 		return "", "", apperrors.Internal(errInternalServerError)
@@ -103,10 +92,6 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*dto.UserRespo
 }
 
 func (s *UserService) SendOTP(ctx context.Context, email string) error {
-	if s.appConfig.Development {
-		email = "test@example.com"
-	}
-
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -122,11 +107,6 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 	}
 
 	otp, err := s.generateOTP()
-
-	if s.appConfig.Development {
-		otp = "123456"
-	}
-
 	if err != nil {
 		s.logger.Errorw("failed to generate OTP", "error", err)
 		return apperrors.Internal(errInternalServerError)
@@ -137,17 +117,15 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 		return apperrors.Internal(errInternalServerError)
 	}
 
-	if !s.appConfig.Development {
-		html, err := emailtpl.RenderOTP(otp)
-		if err != nil {
-			s.logger.Errorw("failed to render OTP email", "error", err)
-			return apperrors.Internal(errInternalServerError)
-		}
+	html, err := emailtpl.RenderOTP(otp)
+	if err != nil {
+		s.logger.Errorw("failed to render OTP email", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
 
-		if err = s.smtpService.Send(email, "Код входа в Kopi", html); err != nil {
-			s.logger.Errorw("failed to send OTP", "error", err)
-			return apperrors.Internal(errInternalServerError)
-		}
+	if err = s.smtpService.Send(email, "Код входа в Kopi", html); err != nil {
+		s.logger.Errorw("failed to send OTP", "error", err)
+		return apperrors.Internal(errInternalServerError)
 	}
 
 	return nil
@@ -176,7 +154,7 @@ func (s *UserService) Login(ctx context.Context, otp string) (*dto.LoginResponse
 	if err = s.userTokenRepo.Create(ctx, &models.UserToken{
 		UserID:    userOTP.UserID,
 		TokenHash: hex.EncodeToString(refreshTokenHash[:]),
-		ExpiresAt: time.Now().Add(90 * 12 * time.Hour),
+		ExpiresAt: time.Now().Add(refreshTokenLifetime),
 	}); err != nil {
 		s.logger.Errorw("failed to create user token", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
@@ -223,6 +201,10 @@ func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
 	refreshTokenHash := sha256.Sum256([]byte(refreshToken))
 	userToken, err := s.userTokenRepo.GetByTokenHash(ctx, hex.EncodeToString(refreshTokenHash[:]))
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		s.logger.Errorw("failed to get user token", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 
