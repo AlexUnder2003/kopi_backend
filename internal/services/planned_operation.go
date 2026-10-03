@@ -12,6 +12,7 @@ import (
 	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -170,7 +171,31 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	var budgetUpdates []dto.BudgetBalanceUpdate
 	updatedOps := make([]models.PlannedOperation, 0, len(ops))
 
+	ids := make([]uuid.UUID, len(ops))
+	for i, op := range ops {
+		ids[i] = op.Account.ID
+	}
+
+	accounts, err := s.accountRepo.GetByIDs(ctx, ids)
+	if err != nil {
+		s.logger.Errorw("failed to get accounts", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	balances := make(map[uuid.UUID]decimal.Decimal, len(accounts))
+	for _, account := range accounts {
+		balances[account.ID] = account.Balance
+	}
+
 	for _, op := range ops {
+		balance := balances[op.Account.ID]
+		if op.Type == models.TransactionTypeExpense && balance.LessThan(op.Amount) {
+			s.logger.Warnw("skip planned operation, insufficient balance", "id", op.ID, "account_id", op.Account.ID)
+			continue
+		}
+
+		balances[op.Account.ID] = balance.Add(signed(op.Type, op.Amount))
+
 		transactions = append(transactions, models.Transaction{
 			Name:           op.Name,
 			Type:           op.Type,

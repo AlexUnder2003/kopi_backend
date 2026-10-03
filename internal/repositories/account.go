@@ -46,6 +46,29 @@ func (r *AccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.Acc
 	return &resp, nil
 }
 
+func (r *AccountRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]dto.AccountResponse, error) {
+	if len(ids) == 0 {
+		return []dto.AccountResponse{}, nil
+	}
+
+	idStrs := make([]string, len(ids))
+	for i, id := range ids {
+		idStrs[i] = id.String()
+	}
+
+	const q = `
+		SELECT a.id, a.name, a.currency, a.icon, a.balance, a.user_id
+		FROM accounts AS a
+		JOIN unnest($1::text[]) AS ids(id) ON a.id = ids.id::uuid
+		GROUP BY a.id`
+
+	var resp []dto.AccountResponse
+	if err := sqlscan.Select(ctx, r.db, &resp, q, idStrs); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID) ([]dto.AccountResponse, error) {
 	const q = `
 		SELECT id, name, currency, icon, balance, user_id

@@ -41,6 +41,30 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, trans
 		return nil, err
 	}
 
+	switch transaction.Type {
+	case models.TransactionTypeTransfer:
+		fromAccount, err := s.accountRepo.GetByID(ctx, *transaction.FromAccountID)
+		if err != nil {
+			return nil, err
+		}
+
+		if transaction.FromAccountID == nil {
+			return nil, apperrors.BadRequest("from account ID is required")
+		}
+
+		if fromAccount.Currency != account.Currency {
+			return nil, apperrors.BadRequest("currency mismatch")
+		}
+
+		if fromAccount.Balance.LessThan(transaction.Amount) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
+	case models.TransactionTypeExpense:
+		if account.Balance.LessThan(transaction.Amount) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Errorw("failed to begin transaction", "error", err)
@@ -107,6 +131,32 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 	account, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
 	if err != nil {
 		return nil, err
+	}
+
+	delta := transaction.Amount.Sub(existing.Amount)
+
+	switch existing.Type {
+	case models.TransactionTypeTransfer:
+		if existing.FromAccount.ID == uuid.Nil {
+			return nil, apperrors.BadRequest("from account ID is required")
+		}
+
+		fromAccount, err := s.accountRepo.GetByID(ctx, existing.FromAccount.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		if fromAccount.Currency != account.Currency {
+			return nil, apperrors.BadRequest("currency mismatch")
+		}
+
+		if delta.IsPositive() && fromAccount.Balance.LessThan(delta) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
+	case models.TransactionTypeExpense:
+		if delta.IsPositive() && account.Balance.LessThan(delta) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
