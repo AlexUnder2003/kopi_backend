@@ -34,6 +34,7 @@ const (
 
 type UserService struct {
 	userRepo      *repositories.UserRepository
+	userOTPRepo   *repositories.UserOTPRepository
 	userTokenRepo *repositories.UserTokenRepository
 	appConfig     *config.AppConfig
 	logger        *zap.SugaredLogger
@@ -42,9 +43,17 @@ type UserService struct {
 
 func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.SugaredLogger) *UserService {
 	userRepo := repositories.NewUserRepository(db)
+	userOTPRepo := repositories.NewUserOTPRepository(db)
 	userTokenRepo := repositories.NewUserTokenRepository(db)
 	smtpService := NewSMTPService(appConfig, logger)
-	return &UserService{userRepo: userRepo, userTokenRepo: userTokenRepo, appConfig: appConfig, logger: logger, smtpService: smtpService}
+	return &UserService{
+		userRepo:      userRepo,
+		userOTPRepo:   userOTPRepo,
+		userTokenRepo: userTokenRepo,
+		appConfig:     appConfig,
+		logger:        logger,
+		smtpService:   smtpService,
+	}
 }
 
 func (s *UserService) generateJWTTokens(userId uuid.UUID) (string, string, error) {
@@ -112,7 +121,7 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 		return apperrors.Internal(errInternalServerError)
 	}
 
-	if err = s.userRepo.CreateOTP(ctx, user.ID, otp); err != nil {
+	if err = s.userOTPRepo.Create(ctx, user.ID, otp); err != nil {
 		s.logger.Errorw("failed to create OTP", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
@@ -132,7 +141,7 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 }
 
 func (s *UserService) Login(ctx context.Context, otp string) (*dto.LoginResponse, error) {
-	userOTP, err := s.userRepo.GetUserIdByOTP(ctx, otp)
+	userOTP, err := s.userOTPRepo.GetByOTP(ctx, otp)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, apperrors.Unauthorized(errMsgInvalidOTP)
@@ -160,7 +169,7 @@ func (s *UserService) Login(ctx context.Context, otp string) (*dto.LoginResponse
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	if err = s.userRepo.DeleteOTP(ctx, otp); err != nil {
+	if err = s.userOTPRepo.Delete(ctx, otp); err != nil {
 		s.logger.Errorw("failed to delete OTP", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
@@ -239,6 +248,22 @@ func (s *UserService) Update(ctx context.Context, user *models.User) (*dto.UserR
 func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 	if err := s.userRepo.Delete(ctx, id); err != nil {
 		s.logger.Errorw("failed to delete user", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
+}
+
+func (s *UserService) DeleteExpiredOTPs(ctx context.Context) error {
+	if err := s.userOTPRepo.DeleteExpired(ctx); err != nil {
+		s.logger.Errorw("failed to delete expired OTPs", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
+}
+
+func (s *UserService) DeleteExpiredTokens(ctx context.Context) error {
+	if err := s.userTokenRepo.DeleteExpired(ctx); err != nil {
+		s.logger.Errorw("failed to delete expired user tokens", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 	return nil

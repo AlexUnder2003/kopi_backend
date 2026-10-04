@@ -171,12 +171,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	var budgetUpdates []dto.BudgetBalanceUpdate
 	updatedOps := make([]models.PlannedOperation, 0, len(ops))
 
-	ids := make([]uuid.UUID, len(ops))
-	for i, op := range ops {
-		ids[i] = op.Account.ID
-	}
-
-	accounts, err := s.accountRepo.GetByIDs(ctx, ids)
+	accounts, err := s.accountRepo.GetByIDs(ctx, ops)
 	if err != nil {
 		s.logger.Errorw("failed to get accounts", "error", err)
 		return apperrors.Internal(errInternalServerError)

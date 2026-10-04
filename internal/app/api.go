@@ -64,7 +64,9 @@ func NewApp() *App {
 
 	budgetWorker := workers.NewBudgetWorker(budgetService)
 	plannedOperationsWorker := workers.NewPlannedOperationsWorker(plannedOperationService)
-	workers := []Worker{budgetWorker, plannedOperationsWorker}
+	otpWorker := workers.NewOTPWorker(userService)
+	userTokenWorker := workers.NewUserTokenWorker(userService)
+	workers := []Worker{budgetWorker, plannedOperationsWorker, otpWorker, userTokenWorker}
 
 	return &App{config: cfg, router: router, db: database, workers: workers}
 }

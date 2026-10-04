@@ -78,7 +78,7 @@ type TransactionResponse struct {
 	Type           models.TransactionType `json:"type" db:"type"`
 	Account        AccountResponseShort   `json:"account,omitempty" db:"account"`
 	Category       CategoryResponse       `json:"category" db:"category"`
-	OccurrenceDate time.Time              `json:"occurrence_date" db:"occurrence_date"`
+	OccurrenceDate time.Time             `json:"occurrence_date" db:"occurrence_date"`
 }
 
 type TransactionResponseTransfer struct {

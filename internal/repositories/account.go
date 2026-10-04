@@ -46,14 +46,14 @@ func (r *AccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.Acc
 	return &resp, nil
 }
 
-func (r *AccountRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]dto.AccountResponse, error) {
-	if len(ids) == 0 {
+func (r *AccountRepository) GetByIDs(ctx context.Context, operations []dto.PlannedOperationDueResponse) ([]dto.AccountResponse, error) {
+	if len(operations) == 0 {
 		return []dto.AccountResponse{}, nil
 	}
 
-	idStrs := make([]string, len(ids))
-	for i, id := range ids {
-		idStrs[i] = id.String()
+	ids := make([]uuid.UUID, len(operations))
+	for i, operation := range operations {
+		ids[i] = operation.Account.ID
 	}
 
 	const q = `
@@ -63,7 +63,7 @@ func (r *AccountRepository) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]dt
 		GROUP BY a.id`
 
 	var resp []dto.AccountResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, idStrs); err != nil {
+	if err := sqlscan.Select(ctx, r.db, &resp, q, ids); err != nil {
 		return nil, err
 	}
 	return resp, nil

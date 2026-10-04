@@ -32,39 +32,6 @@ func (r *UserRepository) Create(ctx context.Context, user *models.User) (*dto.Us
 	return &resp, nil
 }
 
-func (r *UserRepository) CreateOTP(ctx context.Context, userId uuid.UUID, otp string) error {
-	const q = `
-		INSERT INTO user_otps (user_id, otp)
-		VALUES ($1, $2)`
-
-	_, err := r.db.ExecContext(ctx, q, userId, otp)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *UserRepository) DeleteOTP(ctx context.Context, otp string) error {
-	const q = `DELETE FROM user_otps WHERE otp = $1`
-
-	_, err := r.db.ExecContext(ctx, q, otp)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *UserRepository) GetUserIdByOTP(ctx context.Context, otp string) (*models.UserOTP, error) {
-	const q = `SELECT user_id, expires_at FROM user_otps WHERE otp = $1`
-
-	var row models.UserOTP
-	if err := sqlscan.Get(ctx, r.db, &row, q, otp); err != nil {
-		return nil, err
-	}
-
-	return &row, nil
-}
-
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.UserResponse, error) {
 	const q = `SELECT id, name, email FROM users WHERE id = $1`
 

@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"KopiBackend/internal/models"
 
@@ -44,14 +43,14 @@ func (r *UserTokenRepository) GetByTokenHash(ctx context.Context, tokenHash stri
 	return &token, nil
 }
 
-func (r *UserTokenRepository) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
-	const q = `DELETE FROM user_tokens WHERE expires_at <= $1`
+func (r *UserTokenRepository) DeleteExpired(ctx context.Context) error {
+	const q = `DELETE FROM user_tokens WHERE expires_at < now()`
 
-	result, err := r.db.ExecContext(ctx, q, before)
+	_, err := r.db.ExecContext(ctx, q)
 	if err != nil {
-		return 0, err
+		return err
 	}
-	return result.RowsAffected()
+	return nil
 }
 
 func (r *UserTokenRepository) Delete(ctx context.Context, id uuid.UUID) error {
