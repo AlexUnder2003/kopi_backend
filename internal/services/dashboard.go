@@ -136,8 +136,13 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 			fetchErr = err
 			return
 		}
-		for _, transaction := range result {
-			transactions = append(transactions, transaction.(dto.TransactionResponse))
+		for _, item := range result {
+			switch transaction := item.(type) {
+			case dto.TransactionResponse:
+				transactions = append(transactions, transaction)
+			case dto.TransactionResponseTransfer:
+				transactions = append(transactions, transaction.TransactionResponse)
+			}
 		}
 	}()
 
