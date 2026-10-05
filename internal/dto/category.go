@@ -24,7 +24,8 @@ type CategoryUpdate struct {
 }
 
 type CategoryResponse struct {
-	ID   uuid.UUID `json:"id" db:"id"`
-	Name string    `json:"name" db:"name"`
-	Icon string    `json:"icon" db:"icon"`
+	ID       uuid.UUID `json:"id" db:"id"`
+	Name     string    `json:"name" db:"name"`
+	Icon     string    `json:"icon" db:"icon"`
+	IsSystem bool      `json:"is_system" db:"is_system"`
 }

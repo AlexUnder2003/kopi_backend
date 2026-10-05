@@ -55,3 +55,9 @@ func nullTime(t time.Time) any {
 	}
 	return t
 }
+
+type ListParams struct {
+	Filter string
+	Offset int
+	Limit  int
+}

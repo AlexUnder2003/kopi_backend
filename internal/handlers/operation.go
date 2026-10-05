@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"KopiBackend/internal/dto"
@@ -15,8 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
-
-const defaultOperationListLimit = 50
 
 type OperationHandler struct {
 	operationService *services.OperationService
@@ -194,22 +191,11 @@ func operationListParams(c *echo.Context) (repositories.OperationListParams, err
 		params.EndDate = parsed
 	}
 
-	params.Limit = defaultOperationListLimit
-	if value := c.QueryParam("limit"); value != "" {
-		limit, err := strconv.Atoi(value)
-		if err != nil || limit < 1 {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_limit")
-		}
-		params.Limit = limit
+	list, err := listParams(c)
+	if err != nil {
+		return params, err
 	}
-
-	if value := c.QueryParam("offset"); value != "" {
-		offset, err := strconv.Atoi(value)
-		if err != nil || offset < 0 {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_offset")
-		}
-		params.Offset = offset
-	}
+	params.ListParams = list
 
 	return params, nil
 }

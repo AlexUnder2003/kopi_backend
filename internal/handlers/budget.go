@@ -59,7 +59,12 @@ func (h *BudgetHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.budgetService.List(c.Request().Context(), userID)
+	params, err := listParams(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.budgetService.List(c.Request().Context(), userID, params)
 	if err != nil {
 		return mapAppError(err)
 	}

@@ -24,10 +24,11 @@ var CurrencyCodes = []CurrencyCode{
 }
 
 type Account struct {
-	ID       uuid.UUID       `db:"id"`
-	Name     string          `db:"name"`
-	Currency CurrencyCode    `db:"currency"`
-	Icon     string          `db:"icon"`
-	Balance  decimal.Decimal `db:"balance"`
-	UserID   uuid.UUID       `db:"user_id"`
+	ID                   uuid.UUID       `db:"id"`
+	Name                 string          `db:"name"`
+	Currency             CurrencyCode    `db:"currency"`
+	Icon                 string          `db:"icon"`
+	Balance              decimal.Decimal `db:"balance"`
+	UserID               uuid.UUID       `db:"user_id"`
+	IncludeInFreeBalance *bool           `db:"include_in_free_balance"`
 }

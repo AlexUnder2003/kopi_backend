@@ -36,12 +36,11 @@ const operationJoins = `
 	LEFT JOIN accounts fa ON fa.id = t.from_account_id`
 
 type OperationListParams struct {
+	ListParams
 	AccountID  uuid.UUID
 	CategoryID uuid.UUID
 	StartDate  time.Time
 	EndDate    time.Time
-	Limit      int
-	Offset     int
 }
 
 type OperationRepository struct {
@@ -92,13 +91,14 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 		SELECT ` + operationSelectColumns + `
 		FROM operations t
 		` + operationJoins + `
-		WHERE a.user_id = $1
-			AND (t.account_id = $2 OR t.from_account_id = $2 OR $2 IS NULL)
-			AND (t.category_id = $3 OR $3 IS NULL)
-			AND (t.occurrence_date >= $4 OR $4 IS NULL)
-			AND (t.occurrence_date <= $5 OR $5 IS NULL)
-		ORDER BY t.occurrence_date DESC
-		LIMIT $6 OFFSET $7`
+			WHERE a.user_id = $1
+				AND (t.account_id = $2 OR t.from_account_id = $2 OR $2 IS NULL)
+				AND (t.category_id = $3 OR $3 IS NULL)
+				AND (t.occurrence_date >= $4 OR $4 IS NULL)
+				AND (t.occurrence_date <= $5 OR $5 IS NULL)
+				AND (t.name ILIKE '%' || $6 || '%' OR $6 IS NULL)
+			ORDER BY t.occurrence_date DESC
+			LIMIT $7 OFFSET $8`
 
 	var resp []dto.OperationResponseTransfer
 	if err := sqlscan.Select(
@@ -108,6 +108,7 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 		nullUUID(params.CategoryID),
 		nullTime(params.StartDate),
 		nullTime(params.EndDate),
+		nullString(params.Filter),
 		nullInt(params.Limit),
 		nullInt(params.Offset),
 	); err != nil {

@@ -81,11 +81,12 @@ func (s *PlannedOperationService) GetByID(ctx context.Context, id, userID uuid.U
 	return op, nil
 }
 
-func (s *PlannedOperationService) List(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) ([]dto.PlannedOperationResponse, error) {
+func (s *PlannedOperationService) List(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time, params repositories.ListParams) ([]dto.PlannedOperationResponse, error) {
 	ops, err := s.plannedOperationRepo.List(ctx, repositories.PlannedOperationListParams{
-		UserID:    userID,
-		StartDate: startDate,
-		EndDate:   endDate,
+		ListParams: params,
+		UserID:     userID,
+		StartDate:  startDate,
+		EndDate:    endDate,
 	})
 	if err != nil {
 		s.logger.Errorw("failed to list planned operations", "error", err)

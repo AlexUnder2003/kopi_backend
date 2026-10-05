@@ -22,6 +22,7 @@ const (
 )
 
 type BudgetService struct {
+	db              *sql.DB
 	budgetRepo      *repositories.BudgetRepository
 	categoryService *CategoryService
 	logger          *zap.SugaredLogger
@@ -29,6 +30,7 @@ type BudgetService struct {
 
 func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.SugaredLogger) *BudgetService {
 	return &BudgetService{
+		db:              db,
 		budgetRepo:      repositories.NewBudgetRepository(db),
 		categoryService: categoryService,
 		logger:          logger,
@@ -78,8 +80,8 @@ func (s *BudgetService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto
 	return budget, nil
 }
 
-func (s *BudgetService) List(ctx context.Context, userID uuid.UUID) ([]dto.BudgetResponse, error) {
-	budgets, err := s.budgetRepo.List(ctx, userID)
+func (s *BudgetService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) ([]dto.BudgetResponse, error) {
+	budgets, err := s.budgetRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list budgets", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
@@ -150,7 +152,14 @@ func (s *BudgetService) Delete(ctx context.Context, id, userID uuid.UUID) error 
 }
 
 func (s *BudgetService) Reset(ctx context.Context) error {
-	budgets, err := s.budgetRepo.GetByResetDate(ctx, time.Now())
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	budgets, err := s.budgetRepo.GetByResetDate(ctx, time.Now(), tx)
 	if err != nil {
 		s.logger.Errorw("failed to get budgets by reset date", "error", err)
 		return apperrors.Internal(errInternalServerError)
@@ -169,8 +178,13 @@ func (s *BudgetService) Reset(ctx context.Context) error {
 		}
 	}
 
-	if err := s.budgetRepo.BulkReset(ctx, budgetModels); err != nil {
+	if err := s.budgetRepo.BulkReset(ctx, budgetModels, tx); err != nil {
 		s.logger.Errorw("failed to bulk update budgets", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 

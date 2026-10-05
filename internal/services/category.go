@@ -57,8 +57,8 @@ func (s *CategoryService) GetByID(ctx context.Context, id uuid.UUID) (*dto.Categ
 	return cat, nil
 }
 
-func (s *CategoryService) List(ctx context.Context, userID uuid.UUID) ([]dto.CategoryResponse, error) {
-	categories, err := s.categoryRepo.List(ctx, userID)
+func (s *CategoryService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) ([]dto.CategoryResponse, error) {
+	categories, err := s.categoryRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list categories", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)

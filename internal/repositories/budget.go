@@ -82,16 +82,18 @@ func (r *BudgetRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (*
 	return &resp, nil
 }
 
-func (r *BudgetRepository) List(ctx context.Context, userID uuid.UUID) ([]dto.BudgetResponse, error) {
+func (r *BudgetRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.BudgetResponse, error) {
 	const q = `
 		SELECT ` + budgetSelectColumns + `
 		FROM budgets b
 		JOIN categories c ON c.id = b.category_id
 		WHERE b.user_id = $1
-		ORDER BY c.name`
+			AND (b.name ILIKE '%' || $2 || '%' OR $2 IS NULL)
+		ORDER BY c.name
+		LIMIT $3 OFFSET $4`
 
 	var resp []dto.BudgetResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, userID); err != nil {
+	if err := sqlscan.Select(ctx, r.db, &resp, q, userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset)); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -184,16 +186,10 @@ func (r *BudgetRepository) UpdateBalance(ctx context.Context, id uuid.UUID, delt
 	return err
 }
 
-func (r *BudgetRepository) BulkReset(ctx context.Context, budgets []models.Budget) error {
+func (r *BudgetRepository) BulkReset(ctx context.Context, budgets []models.Budget, tx *sql.Tx) error {
 	if len(budgets) == 0 {
 		return nil
 	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 
 	ids := make([]string, len(budgets))
 	balances := make([]string, len(budgets))
@@ -212,22 +208,19 @@ func (r *BudgetRepository) BulkReset(ctx context.Context, budgets []models.Budge
 		FROM unnest($1::text[], $2::text[], $3::text[]) AS v(id, balance, reset_date)
 		WHERE b.id = v.id::uuid`
 
-	if _, err = tx.ExecContext(ctx, q, ids, balances, resetDates); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	_, err := tx.ExecContext(ctx, q, ids, balances, resetDates)
+	return err
 }
 
-func (r *BudgetRepository) GetByResetDate(ctx context.Context, resetDate time.Time) ([]dto.BudgetResponse, error) {
+func (r *BudgetRepository) GetByResetDate(ctx context.Context, resetDate time.Time, tx *sql.Tx) ([]dto.BudgetResponse, error) {
 	const q = `
 		SELECT ` + budgetSelectColumns + `
 		FROM budgets b
 		JOIN categories c ON c.id = b.category_id
 		WHERE b.reset_date <= $1 AND b.is_active = TRUE
-		FOR UPDATE SKIP LOCKED`
+		FOR UPDATE OF b SKIP LOCKED`
 	var resp []dto.BudgetResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, resetDate); err != nil {
+	if err := sqlscan.Select(ctx, tx, &resp, q, resetDate); err != nil {
 		return nil, err
 	}
 	return resp, nil

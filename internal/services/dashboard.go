@@ -2,10 +2,7 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -45,44 +42,13 @@ func NewDashboardService(
 	}
 }
 
-func (s *DashboardService) getCurrencyRates(base string) (map[string]decimal.Decimal, error) {
-	url := s.config.CurrencyAPIURL + "/currencies/" + strings.ToLower(base) + ".json"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Accept", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var currencyResponse dto.CurrencyResponse
-	if err := json.Unmarshal(body, &currencyResponse); err != nil {
-		return nil, err
-	}
-
-	rates := make(map[string]decimal.Decimal, len(currencyResponse.Rates))
-	for code, rate := range currencyResponse.Rates {
-		rates[code] = decimal.NewFromFloat(rate)
-	}
-	return rates, nil
-}
-
 func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, currency string) (*dto.Dashboard, error) {
 	now := time.Now()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	monthEnd := monthStart.AddDate(0, 1, -1)
 
 	var (
-		accounts          []dto.AccountResponse
+		accounts          dto.AccountResponseList
 		operations        []dto.OperationResponse
 		budgets           []dto.BudgetResponse
 		plannedOperations []dto.PlannedOperationResponse
@@ -102,7 +68,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	go func() {
 		defer waitGroup.Done()
-		result, err := s.plannedOperationService.List(ctx, userID, monthStart, monthEnd)
+		result, err := s.plannedOperationService.List(ctx, userID, monthStart, monthEnd, repositories.ListParams{})
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -114,14 +80,14 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	go func() {
 		defer waitGroup.Done()
-		result, err := s.accountService.List(ctx, userID)
+		result, err := s.accountService.List(ctx, userID, repositories.ListParams{}, &currency)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
 			fetchErr = err
 			return
 		}
-		accounts = result
+		accounts = *result
 	}()
 
 	go func() {
@@ -148,7 +114,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	go func() {
 		defer waitGroup.Done()
-		result, err := s.budgetService.List(ctx, userID)
+		result, err := s.budgetService.List(ctx, userID, repositories.ListParams{})
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -160,7 +126,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	go func() {
 		defer waitGroup.Done()
-		rates, err := s.getCurrencyRates(currency)
+		rates, err := GetCurrencyRates(s.config, currency)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -175,18 +141,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 		return nil, fetchErr
 	}
 
-	for _, account := range accounts {
-		if account.Currency == currency {
-			totalBalance = totalBalance.Add(account.Balance)
-			continue
-		}
-
-		rate, ok := currencyRates[strings.ToLower(account.Currency)]
-		if !ok || rate.IsZero() {
-			return nil, errCurrencyRateNotFound
-		}
-		totalBalance = totalBalance.Add(account.Balance.Div(rate))
-	}
+	totalBalance = accounts.TotalBalance
 
 	for _, operation := range operations {
 		if operation.Account.Currency != currency {
@@ -207,6 +162,20 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 	}
 
 	availableBalance = totalBalance
+
+	for _, account := range accounts.Accounts {
+		if account.Currency != currency {
+			rate, ok := currencyRates[strings.ToLower(account.Currency)]
+			if !ok || rate.IsZero() {
+				return nil, errCurrencyRateNotFound
+			}
+			account.Balance = account.Balance.Div(rate)
+		}
+
+		if !account.IncludeInFreeBalance {
+			availableBalance = availableBalance.Sub(account.Balance)
+		}
+	}
 
 	for _, plannedOperation := range plannedOperations {
 		if plannedOperation.Account.Currency != currency {

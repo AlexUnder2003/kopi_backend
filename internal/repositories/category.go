@@ -13,6 +13,12 @@ import (
 
 const transferCategoryName = "Переводы"
 
+const categorySelectColumns = `
+	id,
+	name,
+	icon,
+	CASE WHEN user_id IS NULL THEN TRUE ELSE FALSE END AS is_system`
+
 type CategoryRepository struct {
 	db *sql.DB
 }
@@ -25,7 +31,7 @@ func (r *CategoryRepository) Create(ctx context.Context, category *models.Catego
 	const q = `
 		INSERT INTO categories (name, icon, user_id)
 		VALUES ($1, $2, $3)
-		RETURNING id, name, icon`
+		RETURNING ` + categorySelectColumns
 
 	var resp dto.CategoryResponse
 	if err := sqlscan.Get(ctx, r.db, &resp, q, category.Name, category.Icon, nullUUID(category.UserID)); err != nil {
@@ -34,22 +40,8 @@ func (r *CategoryRepository) Create(ctx context.Context, category *models.Catego
 	return &resp, nil
 }
 
-func (r *CategoryRepository) Accessible(ctx context.Context, id, userID uuid.UUID) (bool, error) {
-	const q = `
-		SELECT EXISTS (
-			SELECT 1 FROM categories
-			WHERE id = $1 AND (user_id IS NULL OR user_id = $2)
-		)`
-
-	var ok bool
-	if err := r.db.QueryRowContext(ctx, q, id, userID).Scan(&ok); err != nil {
-		return false, err
-	}
-	return ok, nil
-}
-
 func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.CategoryResponse, error) {
-	const q = `SELECT id, name, icon FROM categories WHERE id = $1`
+	const q = `SELECT ` + categorySelectColumns + ` FROM categories WHERE id = $1`
 
 	var resp dto.CategoryResponse
 	if err := sqlscan.Get(ctx, r.db, &resp, q, id); err != nil {
@@ -58,15 +50,17 @@ func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.Ca
 	return &resp, nil
 }
 
-func (r *CategoryRepository) List(ctx context.Context, userID uuid.UUID) ([]dto.CategoryResponse, error) {
+func (r *CategoryRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.CategoryResponse, error) {
 	const q = `
-		SELECT id, name, icon
-		FROM categories
-		WHERE user_id IS NULL OR user_id = $1
-		ORDER BY name`
+		SELECT ` + categorySelectColumns + `
+ 		FROM categories
+		WHERE (user_id IS NULL OR user_id = $1)
+			AND (name ILIKE '%' || $2 || '%' OR $2 IS NULL)
+		ORDER BY name
+		LIMIT $3 OFFSET $4`
 
 	var resp []dto.CategoryResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, userID); err != nil {
+	if err := sqlscan.Select(ctx, r.db, &resp, q, userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset)); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -88,7 +82,7 @@ func (r *CategoryRepository) Update(ctx context.Context, category *models.Catego
 		SET name = COALESCE($2, name),
 		    icon = COALESCE($3, icon)
 		WHERE id = $1
-		RETURNING id, name, icon`
+		RETURNING ` + categorySelectColumns
 
 	var resp dto.CategoryResponse
 	if err := sqlscan.Get(

@@ -55,9 +55,6 @@ type BudgetUpdate struct {
 }
 
 func (r *BudgetUpdate) Validate() error {
-	if !r.Amount.IsPositive() {
-		return errors.New("amount")
-	}
 	if r.IntervalType != "" && !validIntervalType(r.IntervalType) {
 		return errors.New("interval_type")
 	}

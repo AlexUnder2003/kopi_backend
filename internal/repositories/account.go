@@ -12,6 +12,15 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const accountSelectColumns = `
+	a.id,
+	a.name,
+	a.currency,
+	a.icon,
+	a.balance,
+	a.user_id,
+	a.include_in_free_balance`
+
 type AccountRepository struct {
 	db *sql.DB
 }
@@ -22,14 +31,14 @@ func NewAccountRepository(db *sql.DB) *AccountRepository {
 
 func (r *AccountRepository) Create(ctx context.Context, account *models.Account) (*dto.AccountResponse, error) {
 	const q = `
-		INSERT INTO accounts (name, currency, icon, balance, user_id)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, name, currency, icon, balance, user_id`
+		INSERT INTO accounts AS a (name, currency, icon, balance, user_id, include_in_free_balance)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING ` + accountSelectColumns
 
 	var resp dto.AccountResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		account.Name, account.Currency, account.Icon, account.Balance, account.UserID,
+		account.Name, account.Currency, account.Icon, account.Balance, account.UserID, account.IncludeInFreeBalance,
 	); err != nil {
 		return nil, err
 	}
@@ -37,7 +46,10 @@ func (r *AccountRepository) Create(ctx context.Context, account *models.Account)
 }
 
 func (r *AccountRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.AccountResponse, error) {
-	q := `SELECT id, name, currency, icon, balance, user_id FROM accounts WHERE id = $1`
+	const q = `
+		SELECT ` + accountSelectColumns + `
+		FROM accounts AS a
+		WHERE a.id = $1`
 
 	var resp dto.AccountResponse
 	if err := sqlscan.Get(ctx, r.db, &resp, q, id); err != nil {
@@ -57,7 +69,7 @@ func (r *AccountRepository) GetByIDs(ctx context.Context, operations []dto.Plann
 	}
 
 	const q = `
-		SELECT a.id, a.name, a.currency, a.icon, a.balance, a.user_id
+		SELECT ` + accountSelectColumns + `
 		FROM accounts AS a
 		JOIN unnest($1::text[]) AS ids(id) ON a.id = ids.id::uuid
 		GROUP BY a.id`
@@ -69,15 +81,20 @@ func (r *AccountRepository) GetByIDs(ctx context.Context, operations []dto.Plann
 	return resp, nil
 }
 
-func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID) ([]dto.AccountResponse, error) {
+func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.AccountResponse, error) {
 	const q = `
-		SELECT id, name, currency, icon, balance, user_id
-		FROM accounts
-		WHERE user_id = $1
-		ORDER BY name`
+		SELECT ` + accountSelectColumns + `
+		FROM accounts AS a
+		WHERE a.user_id = $1
+			AND (a.name ILIKE '%' || $2 || '%' OR $2 IS NULL)
+		ORDER BY a.name
+		LIMIT $3 OFFSET $4`
 
 	var resp []dto.AccountResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, userID); err != nil {
+	if err := sqlscan.Select(
+		ctx, r.db, &resp, q,
+		userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset),
+	); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -85,16 +102,18 @@ func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID) ([]dto.A
 
 func (r *AccountRepository) Update(ctx context.Context, account *models.Account) (*dto.AccountResponse, error) {
 	const q = `
-		UPDATE accounts
-		SET name = COALESCE($2, name),
-		    icon = COALESCE($3, icon)
-		WHERE id = $1
-		RETURNING id, name, currency, icon, user_id`
+		UPDATE accounts AS a
+		SET name = COALESCE($2, a.name),
+		    icon = COALESCE($3, a.icon),
+			    include_in_free_balance = COALESCE($4::boolean, a.include_in_free_balance)
+		WHERE a.id = $1
+		RETURNING ` + accountSelectColumns
 
 	var resp dto.AccountResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
 		account.ID, nullString(account.Name), nullString(account.Icon),
+		account.IncludeInFreeBalance,
 	); err != nil {
 		return nil, err
 	}
@@ -131,14 +150,18 @@ func (r *AccountRepository) UpdateBalance(ctx context.Context, accountID uuid.UU
 	const q = `
 		UPDATE accounts
 		SET balance = balance + $2
-		WHERE id = $1
-		RETURNING balance`
+		WHERE id = $1`
 
-	var balance decimal.Decimal
-	if err := sqlscan.Get(
-		ctx, DBorTx(r.db, tx), &balance, q, accountID, delta,
-	); err != nil {
+	result, err := DBorTx(r.db, tx).ExecContext(ctx, q, accountID, delta)
+	if err != nil {
 		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
 	}
 	return nil
 }

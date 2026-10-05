@@ -48,11 +48,12 @@ func (h *AccountHandler) Create(c *echo.Context) error {
 	}
 
 	resp, err := h.accountService.Create(c.Request().Context(), &models.Account{
-		Name:     req.Name,
-		Currency: models.CurrencyCode(req.Currency),
-		Icon:     req.Icon,
-		Balance:  req.Balance,
-		UserID:   userID,
+		Name:                 req.Name,
+		Currency:             models.CurrencyCode(req.Currency),
+		Icon:                 req.Icon,
+		Balance:              req.Balance,
+		UserID:               userID,
+		IncludeInFreeBalance: &req.IncludeInFreeBalance,
 	})
 	if err != nil {
 		return mapAppError(err)
@@ -67,7 +68,24 @@ func (h *AccountHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.accountService.List(c.Request().Context(), userID)
+	var currency *string
+	if value := c.QueryParam("currency"); value != "" {
+		if !dto.ValidCurrency(value) {
+			return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
+		}
+		currency = &value
+	}
+
+	if currency == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
+	}
+
+	params, err := listParams(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.accountService.List(c.Request().Context(), userID, params, currency)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -111,9 +129,10 @@ func (h *AccountHandler) Update(c *echo.Context) error {
 	}
 
 	resp, err := h.accountService.Update(c.Request().Context(), userID, &models.Account{
-		ID:   id,
-		Name: req.Name,
-		Icon: req.Icon,
+		ID:                   id,
+		Name:                 req.Name,
+		Icon:                 req.Icon,
+		IncludeInFreeBalance: req.IncludeInFreeBalance,
 	})
 	if err != nil {
 		return mapAppError(err)
@@ -145,7 +164,7 @@ func mapAccountValidationErrors(err error) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_name")
 	}
 	if err.Error() == "currency" {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_currency")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
 	}
 	return err
 }

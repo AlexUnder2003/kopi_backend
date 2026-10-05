@@ -60,7 +60,12 @@ func (h *PlannedOperationHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.plannedOperationService.List(c.Request().Context(), userID, time.Time{}, time.Time{})
+	params, err := listParams(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.plannedOperationService.List(c.Request().Context(), userID, time.Time{}, time.Time{}, params)
 	if err != nil {
 		return mapAppError(err)
 	}

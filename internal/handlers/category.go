@@ -64,7 +64,12 @@ func (h *CategoryHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	resp, err := h.categoryService.List(c.Request().Context(), userID)
+	params, err := listParams(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.categoryService.List(c.Request().Context(), userID, params)
 	if err != nil {
 		return mapAppError(err)
 	}

@@ -41,6 +41,10 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 		return nil, err
 	}
 
+	if account.UserID != userID {
+		return nil, apperrors.NotFound(errMsgAccountNotFound)
+	}
+
 	switch operation.Type {
 	case models.OperationTypeTransfer:
 		if operation.FromAccountID == uuid.Nil {
@@ -50,6 +54,10 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 		fromAccount, err := s.accountRepo.GetByID(ctx, operation.FromAccountID)
 		if err != nil {
 			return nil, err
+		}
+
+		if fromAccount.UserID != userID {
+			return nil, apperrors.NotFound(errMsgAccountNotFound)
 		}
 
 		if fromAccount.Currency != account.Currency {

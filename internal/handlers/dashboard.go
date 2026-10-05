@@ -34,7 +34,7 @@ func (h *DashboardHandler) Get(c *echo.Context) error {
 
 	currency := c.QueryParam("currency")
 	if !dto.ValidCurrency(currency) {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_dashboard_currency")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
 	}
 
 	resp, err := h.dashboardService.GetDashboard(c.Request().Context(), userID, currency)

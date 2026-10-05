@@ -4,30 +4,36 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"KopiBackend/internal/apperrors"
+	"KopiBackend/internal/config"
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
 	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 const (
 	errMsgAccountNotFound      = "not_found_account"
 	errMsgAccountAlreadyExists = "already_exists_account"
+	errMsgCurrencyRateNotFound = "not_found_currency_rate"
 )
 
 type AccountService struct {
 	accountRepo *repositories.AccountRepository
+	config      *config.AppConfig
 	logger      *zap.SugaredLogger
 }
 
-func NewAccountService(db *sql.DB, logger *zap.SugaredLogger) *AccountService {
+func NewAccountService(db *sql.DB, config *config.AppConfig, logger *zap.SugaredLogger) *AccountService {
 	return &AccountService{
 		accountRepo: repositories.NewAccountRepository(db),
+		config:      config,
 		logger:      logger,
 	}
 }
@@ -64,14 +70,38 @@ func (s *AccountService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dt
 	return acc, nil
 }
 
-func (s *AccountService) List(ctx context.Context, userID uuid.UUID) ([]dto.AccountResponse, error) {
-	accounts, err := s.accountRepo.List(ctx, userID)
+func (s *AccountService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams, currency *string) (*dto.AccountResponseList, error) {
+	accounts, err := s.accountRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list accounts", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	return accounts, nil
+	rates, err := GetCurrencyRates(s.config, strings.ToLower(*currency))
+	if err != nil {
+		s.logger.Errorw("failed to get currency rates", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	var totalBalance decimal.Decimal
+	for _, account := range accounts {
+		if account.Currency == *currency {
+			totalBalance = totalBalance.Add(account.Balance)
+		} else {
+			rate, ok := rates[strings.ToLower(account.Currency)]
+			if !ok || rate.IsZero() {
+				return nil, apperrors.NotFound(errMsgCurrencyRateNotFound)
+			}
+
+			totalBalance = totalBalance.Add(account.Balance.Div(rate))
+		}
+	}
+
+	return &dto.AccountResponseList{
+		Accounts:     accounts,
+		TotalBalance: totalBalance,
+	}, nil
+
 }
 
 func (s *AccountService) Update(ctx context.Context, userID uuid.UUID, account *models.Account) (*dto.AccountResponse, error) {
