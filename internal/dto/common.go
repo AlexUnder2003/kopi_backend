@@ -17,3 +17,12 @@ func validIntervalType(intervalType models.IntervalType) bool {
 		return false
 	}
 }
+
+func validOperationType(opType models.OperationType) bool {
+	switch opType {
+	case models.OperationTypeIncome, models.OperationTypeExpense, models.OperationTypeTransfer:
+		return true
+	default:
+		return false
+	}
+}

@@ -45,7 +45,7 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		UserID:       userID,
 		Amount:       budget.Amount,
 		IntervalType: budget.IntervalType,
-		Interval:     intervalPtr(budget.Interval),
+		Interval:     budget.Interval,
 		StartDate:    budget.StartDate,
 		ResetDate:    NextDate(budget.StartDate, budget.IntervalType, budget.Interval),
 		Currency:     models.CurrencyCode(budget.Currency),
@@ -98,11 +98,16 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
+	isActive := existingBudget.IsActive
+	if budget.IsActive != nil {
+		isActive = *budget.IsActive
+	}
+
 	budgetModel := &models.Budget{
 		ID:       existingBudget.ID,
 		Name:     budget.Name,
 		Amount:   budget.Amount,
-		IsActive: budget.IsActive,
+		IsActive: isActive,
 	}
 
 	if budgetScheduleChanged(budget) {
@@ -115,7 +120,7 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 		}
 
 		budgetModel.IntervalType = intervalType
-		budgetModel.Interval = intervalPtr(interval)
+		budgetModel.Interval = interval
 		budgetModel.StartDate = startDate
 		budgetModel.ResetDate = NextDate(startDate, intervalType, interval)
 	}

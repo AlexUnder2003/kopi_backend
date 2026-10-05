@@ -28,13 +28,6 @@ func nullInt(n int) any {
 	return n
 }
 
-func nullIntPtr(n *int) any {
-	if n == nil || *n == 0 {
-		return nil
-	}
-	return *n
-}
-
 func nullString(s string) any {
 	if s == "" {
 		return nil
@@ -49,13 +42,6 @@ func nullUUID(id uuid.UUID) any {
 	return id
 }
 
-func nullUUIDPtr(id *uuid.UUID) any {
-	if id == nil || *id == uuid.Nil {
-		return nil
-	}
-	return *id
-}
-
 func nullDecimal(d decimal.Decimal) any {
 	if d.IsZero() {
 		return nil
@@ -68,18 +54,4 @@ func nullTime(t time.Time) any {
 		return nil
 	}
 	return t
-}
-
-func nullBoolPtr(b *bool) any {
-	if b == nil {
-		return nil
-	}
-	return *b
-}
-
-func nullTimePtr(t *time.Time) any {
-	if t == nil || t.IsZero() {
-		return nil
-	}
-	return *t
 }

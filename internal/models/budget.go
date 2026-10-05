@@ -25,9 +25,9 @@ type Budget struct {
 	UserID       uuid.UUID       `db:"user_id"`
 	Currency     CurrencyCode    `db:"currency"`
 	IntervalType IntervalType    `db:"interval_type"`
-	Interval     *int            `db:"interval"`
+	Interval     int             `db:"interval"`
 	StartDate    time.Time       `db:"start_date"`
 	ResetDate    time.Time       `db:"reset_date"`
 	CategoryID   uuid.UUID       `db:"category_id"`
-	IsActive     *bool           `db:"is_active"`
+	IsActive     bool            `db:"is_active"`
 }

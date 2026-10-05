@@ -62,8 +62,8 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	var resp dto.PlannedOperationResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullIntPtr(op.Interval),
-		op.CategoryID, op.PlannedAt, nullTimePtr(op.NextRunAt), op.IsRecurring,
+		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullInt(op.Interval),
+		op.CategoryID, op.PlannedAt, nullTime(op.NextRunAt), op.IsRecurring,
 	); err != nil {
 		return nil, err
 	}
@@ -114,12 +114,12 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 			SET name = COALESCE($2, name),
 			    account_id = COALESCE($3, account_id),
 			    amount = COALESCE($4::numeric, amount),
-			    type = COALESCE($5::transaction_type, type),
+			    type = COALESCE($5::operation_type, type),
 				    interval_type = COALESCE($6::interval_type, interval_type),
 			    "interval" = COALESCE($7::int, "interval"),
 			    category_id = COALESCE($8, category_id),
-			    planned_at = COALESCE($9::date, planned_at),
-			    next_run_at = COALESCE($10::date, next_run_at),
+			    planned_at = COALESCE($9::timestamptz, planned_at),
+			    next_run_at = COALESCE($10::timestamptz, next_run_at),
 			    is_recurring = COALESCE($11::boolean, is_recurring)
 			WHERE id = $1
 			RETURNING id, name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
@@ -138,11 +138,11 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 		nullDecimal(op.Amount),
 		nullString(string(op.Type)),
 		nullString(string(op.IntervalType)),
-		nullIntPtr(op.Interval),
+		nullInt(op.Interval),
 		nullUUID(op.CategoryID),
 		nullTime(op.PlannedAt),
-		nullTimePtr(op.NextRunAt),
-		nullBoolPtr(op.IsRecurring),
+		nullTime(op.NextRunAt),
+		op.IsRecurring,
 	); err != nil {
 		return nil, err
 	}
@@ -176,14 +176,14 @@ func (r *PlannedOperationRepository) BulkUpdate(ctx context.Context, ops []model
 
 	for i, op := range ops {
 		ids[i] = op.ID.String()
-		if op.NextRunAt != nil && !op.NextRunAt.IsZero() {
-			nextRunAts[i] = op.NextRunAt.Format(time.DateOnly)
+		if !op.NextRunAt.IsZero() {
+			nextRunAts[i] = op.NextRunAt.UTC().Format(time.RFC3339)
 		}
 	}
 
 	const q = `
 		UPDATE planned_operations AS p
-		SET next_run_at = NULLIF(v.next_run_at, '')::date
+		SET next_run_at = NULLIF(v.next_run_at, '')::timestamptz
 		FROM unnest($1::text[], $2::text[]) AS v(id, next_run_at)
 		WHERE p.id = v.id::uuid`
 

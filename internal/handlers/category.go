@@ -49,7 +49,7 @@ func (h *CategoryHandler) Create(c *echo.Context) error {
 	resp, err := h.categoryService.Create(c.Request().Context(), &models.Category{
 		Name:   req.Name,
 		Icon:   req.Icon,
-		UserID: &userID,
+		UserID: userID,
 	})
 	if err != nil {
 		return mapAppError(err)

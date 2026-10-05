@@ -12,11 +12,11 @@ type PlannedOperation struct {
 	Name         string          `db:"name"`
 	AccountID    uuid.UUID       `db:"account_id"`
 	Amount       decimal.Decimal `db:"amount"`
-	Type         TransactionType `db:"type"`
+	Type         OperationType   `db:"type"`
 	IntervalType IntervalType    `db:"interval_type"`
-	Interval     *int            `db:"interval"`
+	Interval     int             `db:"interval"`
 	CategoryID   uuid.UUID       `db:"category_id"`
 	PlannedAt    time.Time       `db:"planned_at"`
-	NextRunAt    *time.Time      `db:"next_run_at"`
-	IsRecurring  *bool           `db:"is_recurring"`
+	NextRunAt    time.Time       `db:"next_run_at"`
+	IsRecurring  bool            `db:"is_recurring"`
 }

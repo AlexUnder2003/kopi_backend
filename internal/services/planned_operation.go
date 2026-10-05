@@ -21,7 +21,7 @@ const errMsgPlannedOperationNotFound = "not_found_planned_operation"
 type PlannedOperationService struct {
 	db                   *sql.DB
 	plannedOperationRepo *repositories.PlannedOperationRepository
-	transactionRepo      *repositories.TransactionRepository
+	operationRepo        *repositories.OperationRepository
 	accountRepo          *repositories.AccountRepository
 	budgetRepo           *repositories.BudgetRepository
 	accountService       *AccountService
@@ -32,7 +32,7 @@ func NewPlannedOperationService(db *sql.DB, accountService *AccountService, logg
 	return &PlannedOperationService{
 		db:                   db,
 		plannedOperationRepo: repositories.NewPlannedOperationRepository(db),
-		transactionRepo:      repositories.NewTransactionRepository(db),
+		operationRepo:        repositories.NewOperationRepository(db),
 		accountRepo:          repositories.NewAccountRepository(db),
 		budgetRepo:           repositories.NewBudgetRepository(db),
 		accountService:       accountService,
@@ -46,18 +46,17 @@ func (s *PlannedOperationService) Create(ctx context.Context, userID uuid.UUID, 
 		return nil, err
 	}
 
-	isRecurring := op.IsRecurring
 	model := &models.PlannedOperation{
 		Name:         op.Name,
 		AccountID:    op.AccountID,
 		Amount:       op.Amount,
 		Type:         op.Type,
 		IntervalType: op.IntervalType,
-		Interval:     intervalPtr(op.Interval),
+		Interval:     op.Interval,
 		CategoryID:   op.CategoryID,
 		PlannedAt:    op.PlannedAt,
-		NextRunAt:    timePtr(nextRunAt(op.PlannedAt, op.IntervalType, op.Interval)),
-		IsRecurring:  &isRecurring,
+		NextRunAt:    nextRunAt(op.PlannedAt, op.IntervalType, op.Interval),
+		IsRecurring:  op.IsRecurring,
 	}
 
 	created, err := s.plannedOperationRepo.Create(ctx, model)
@@ -102,6 +101,11 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 		return nil, err
 	}
 
+	isRecurring := existing.IsRecurring
+	if op.IsRecurring != nil {
+		isRecurring = *op.IsRecurring
+	}
+
 	model := &models.PlannedOperation{
 		ID:           existing.ID,
 		Name:         op.Name,
@@ -109,18 +113,18 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 		Amount:       op.Amount,
 		Type:         op.Type,
 		IntervalType: op.IntervalType,
-		Interval:     intervalPtr(op.Interval),
+		Interval:     op.Interval,
 		CategoryID:   op.CategoryID,
 		PlannedAt:    op.PlannedAt,
-		IsRecurring:  op.IsRecurring,
+		IsRecurring:  isRecurring,
 	}
 
 	if scheduleChanged(op) {
-		model.NextRunAt = timePtr(nextRunAt(
+		model.NextRunAt = nextRunAt(
 			effectiveTime(op.PlannedAt, existing.PlannedAt),
 			effectiveIntervalType(op.IntervalType, existing.IntervalType),
 			effectiveInterval(op.Interval, existingInterval(existing.Interval)),
-		))
+		)
 	}
 
 	updated, err := s.plannedOperationRepo.Update(ctx, model)
@@ -149,7 +153,7 @@ func (s *PlannedOperationService) Delete(ctx context.Context, id, userID uuid.UU
 }
 
 func (s *PlannedOperationService) Execute(ctx context.Context) error {
-	ops, err := s.plannedOperationRepo.GetByNextRunAt(ctx, time.Now())
+	ops, err := s.plannedOperationRepo.GetByNextRunAt(ctx, time.Now().UTC())
 	if err != nil {
 		s.logger.Errorw("failed to get planned operations by next run at", "error", err)
 		return apperrors.Internal(errInternalServerError)
@@ -166,7 +170,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	transactions := make([]models.Transaction, 0, len(ops))
+	operations := make([]models.Operation, 0, len(ops))
 	accountUpdates := make([]dto.AccountBalanceUpdate, 0, len(ops))
 	var budgetUpdates []dto.BudgetBalanceUpdate
 	updatedOps := make([]models.PlannedOperation, 0, len(ops))
@@ -184,14 +188,14 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 
 	for _, op := range ops {
 		balance := balances[op.Account.ID]
-		if op.Type == models.TransactionTypeExpense && balance.LessThan(op.Amount) {
+		if op.Type == models.OperationTypeExpense && balance.LessThan(op.Amount) {
 			s.logger.Warnw("skip planned operation, insufficient balance", "id", op.ID, "account_id", op.Account.ID)
 			continue
 		}
 
 		balances[op.Account.ID] = balance.Add(signed(op.Type, op.Amount))
 
-		transactions = append(transactions, models.Transaction{
+		operations = append(operations, models.Operation{
 			Name:           op.Name,
 			Type:           op.Type,
 			AccountID:      op.Account.ID,
@@ -206,7 +210,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			Delta: delta,
 		})
 
-		if op.Type == models.TransactionTypeExpense {
+		if op.Type == models.OperationTypeExpense {
 			budgetUpdates = append(budgetUpdates, dto.BudgetBalanceUpdate{
 				UserID:     op.UserID,
 				CategoryID: op.Category.ID,
@@ -216,9 +220,13 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 		}
 
 		if op.IsRecurring {
+			base := op.PlannedAt
+			if op.NextRunAt != nil {
+				base = *op.NextRunAt
+			}
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
-				NextRunAt: timePtr(nextRunAt(*op.NextRunAt, op.IntervalType, existingInterval(op.Interval))),
+				NextRunAt: nextRunAt(base, op.IntervalType, existingInterval(op.Interval)),
 			})
 		} else {
 			updatedOps = append(updatedOps, models.PlannedOperation{
@@ -227,8 +235,8 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 		}
 	}
 
-	if err := s.transactionRepo.BulkCreate(ctx, transactions, tx); err != nil {
-		s.logger.Errorw("failed to bulk create transactions", "error", err)
+	if err := s.operationRepo.BulkCreate(ctx, operations, tx); err != nil {
+		s.logger.Errorw("failed to bulk create operations", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 

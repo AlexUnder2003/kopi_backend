@@ -16,47 +16,47 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-const defaultTransactionListLimit = 50
+const defaultOperationListLimit = 50
 
-type TransactionHandler struct {
-	transactionService *services.TransactionService
+type OperationHandler struct {
+	operationService *services.OperationService
 }
 
-func NewTransactionHandler(transactionService *services.TransactionService) *TransactionHandler {
-	return &TransactionHandler{transactionService: transactionService}
+func NewOperationHandler(operationService *services.OperationService) *OperationHandler {
+	return &OperationHandler{operationService: operationService}
 }
 
-func (h *TransactionHandler) Register(g *echo.Group) {
-	transactions := g.Group("/transactions")
-	transactions.Use(middleware.UserMiddleware)
+func (h *OperationHandler) Register(g *echo.Group) {
+	operations := g.Group("/operations")
+	operations.Use(middleware.UserMiddleware)
 
-	transactions.POST("", h.Create)
-	transactions.GET("", h.List)
-	transactions.GET("/:id", h.GetByID)
-	transactions.PATCH("/:id", h.Update)
-	transactions.DELETE("/:id", h.Delete)
+	operations.POST("", h.Create)
+	operations.GET("", h.List)
+	operations.GET("/:id", h.GetByID)
+	operations.PATCH("/:id", h.Update)
+	operations.DELETE("/:id", h.Delete)
 }
 
-func (h *TransactionHandler) Create(c *echo.Context) error {
+func (h *OperationHandler) Create(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	var req dto.TransactionPost
+	var req dto.OperationPost
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return mapTransactionValidationErrors(err)
+		return mapOperationValidationErrors(err)
 	}
 
-	resp, err := h.transactionService.Create(c.Request().Context(), userID, &models.Transaction{
+	resp, err := h.operationService.Create(c.Request().Context(), userID, &models.Operation{
 		Name:           req.Name,
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
-		FromAccountID:  uuidPtr(req.FromAccountID),
+		FromAccountID:  req.FromAccountID,
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -67,18 +67,18 @@ func (h *TransactionHandler) Create(c *echo.Context) error {
 	return c.JSON(http.StatusCreated, resp)
 }
 
-func (h *TransactionHandler) List(c *echo.Context) error {
+func (h *OperationHandler) List(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	params, err := transactionListParams(c)
+	params, err := operationListParams(c)
 	if err != nil {
 		return err
 	}
 
-	resp, err := h.transactionService.List(c.Request().Context(), userID, params)
+	resp, err := h.operationService.List(c.Request().Context(), userID, params)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -86,7 +86,7 @@ func (h *TransactionHandler) List(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *TransactionHandler) GetByID(c *echo.Context) error {
+func (h *OperationHandler) GetByID(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
@@ -97,7 +97,7 @@ func (h *TransactionHandler) GetByID(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	resp, err := h.transactionService.GetByID(c.Request().Context(), id, userID)
+	resp, err := h.operationService.GetByID(c.Request().Context(), id, userID)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -105,7 +105,7 @@ func (h *TransactionHandler) GetByID(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *TransactionHandler) Update(c *echo.Context) error {
+func (h *OperationHandler) Update(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
@@ -116,21 +116,21 @@ func (h *TransactionHandler) Update(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	var req dto.TransactionUpdate
+	var req dto.OperationUpdate
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return mapTransactionValidationErrors(err)
+		return mapOperationValidationErrors(err)
 	}
 
-	resp, err := h.transactionService.Update(c.Request().Context(), userID, &models.Transaction{
+	resp, err := h.operationService.Update(c.Request().Context(), userID, &models.Operation{
 		ID:             id,
 		Name:           req.Name,
 		Amount:         req.Amount,
 		Type:           req.Type,
 		AccountID:      req.AccountID,
-		FromAccountID:  uuidPtr(req.FromAccountID),
+		FromAccountID:  req.FromAccountID,
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})
@@ -141,7 +141,7 @@ func (h *TransactionHandler) Update(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-func (h *TransactionHandler) Delete(c *echo.Context) error {
+func (h *OperationHandler) Delete(c *echo.Context) error {
 	userID, err := utils.GetUserIDFromContext(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
@@ -152,15 +152,15 @@ func (h *TransactionHandler) Delete(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	if err := h.transactionService.Delete(c.Request().Context(), id, userID); err != nil {
+	if err := h.operationService.Delete(c.Request().Context(), id, userID); err != nil {
 		return mapAppError(err)
 	}
 
 	return c.NoContent(http.StatusNoContent)
 }
 
-func transactionListParams(c *echo.Context) (repositories.TransactionListParams, error) {
-	var params repositories.TransactionListParams
+func operationListParams(c *echo.Context) (repositories.OperationListParams, error) {
+	var params repositories.OperationListParams
 
 	if value := c.QueryParam("account_id"); value != "" {
 		id, err := uuid.Parse(value)
@@ -179,26 +179,26 @@ func transactionListParams(c *echo.Context) (repositories.TransactionListParams,
 	}
 
 	if value := c.QueryParam("start_date"); value != "" {
-		parsed, err := parseTransactionDate(value)
+		parsed, err := parseOperationDate(value)
 		if err != nil {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_date")
+			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_date")
 		}
 		params.StartDate = parsed
 	}
 
 	if value := c.QueryParam("end_date"); value != "" {
-		parsed, err := parseTransactionDate(value)
+		parsed, err := parseOperationDate(value)
 		if err != nil {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_date")
+			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_date")
 		}
 		params.EndDate = parsed
 	}
 
-	params.Limit = defaultTransactionListLimit
+	params.Limit = defaultOperationListLimit
 	if value := c.QueryParam("limit"); value != "" {
 		limit, err := strconv.Atoi(value)
 		if err != nil || limit < 1 {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_limit")
+			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_limit")
 		}
 		params.Limit = limit
 	}
@@ -206,7 +206,7 @@ func transactionListParams(c *echo.Context) (repositories.TransactionListParams,
 	if value := c.QueryParam("offset"); value != "" {
 		offset, err := strconv.Atoi(value)
 		if err != nil || offset < 0 {
-			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_offset")
+			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_offset")
 		}
 		params.Offset = offset
 	}
@@ -214,32 +214,25 @@ func transactionListParams(c *echo.Context) (repositories.TransactionListParams,
 	return params, nil
 }
 
-func uuidPtr(id uuid.UUID) *uuid.UUID {
-	if id == uuid.Nil {
-		return nil
-	}
-	return &id
-}
-
-func parseTransactionDate(value string) (time.Time, error) {
+func parseOperationDate(value string) (time.Time, error) {
 	if parsed, err := time.Parse(time.DateOnly, value); err == nil {
 		return parsed, nil
 	}
 	return time.Parse(time.RFC3339, value)
 }
 
-func mapTransactionValidationErrors(err error) error {
+func mapOperationValidationErrors(err error) error {
 	switch err.Error() {
 	case "name":
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_name")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_name")
 	case "amount":
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_amount")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_amount")
 	case "type":
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_type")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_type")
 	case "occurrence_date":
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_occurrence_date")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_occurrence_date")
 	case "from_account_id":
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_transaction_from_account_id")
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_from_account_id")
 	default:
 		return err
 	}

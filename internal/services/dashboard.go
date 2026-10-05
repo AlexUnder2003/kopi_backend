@@ -24,7 +24,7 @@ var errCurrencyRateNotFound = errors.New("currency_rate_not_found")
 type DashboardService struct {
 	config                  *config.AppConfig
 	accountService          *AccountService
-	transactionService      *TransactionService
+	operationService        *OperationService
 	budgetService           *BudgetService
 	plannedOperationService *PlannedOperationService
 }
@@ -32,14 +32,14 @@ type DashboardService struct {
 func NewDashboardService(
 	config *config.AppConfig,
 	accountService *AccountService,
-	transactionService *TransactionService,
+	operationService *OperationService,
 	budgetService *BudgetService,
 	plannedOperationService *PlannedOperationService,
 ) *DashboardService {
 	return &DashboardService{
 		config:                  config,
 		accountService:          accountService,
-		transactionService:      transactionService,
+		operationService:        operationService,
 		budgetService:           budgetService,
 		plannedOperationService: plannedOperationService,
 	}
@@ -83,7 +83,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	var (
 		accounts          []dto.AccountResponse
-		transactions      []dto.TransactionResponse
+		operations        []dto.OperationResponse
 		budgets           []dto.BudgetResponse
 		plannedOperations []dto.PlannedOperationResponse
 
@@ -126,7 +126,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 
 	go func() {
 		defer waitGroup.Done()
-		result, err := s.transactionService.List(ctx, userID, repositories.TransactionListParams{
+		result, err := s.operationService.List(ctx, userID, repositories.OperationListParams{
 			StartDate: monthStart,
 			EndDate:   monthEnd,
 		})
@@ -137,11 +137,11 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 			return
 		}
 		for _, item := range result {
-			switch transaction := item.(type) {
-			case dto.TransactionResponse:
-				transactions = append(transactions, transaction)
-			case dto.TransactionResponseTransfer:
-				transactions = append(transactions, transaction.TransactionResponse)
+			switch operation := item.(type) {
+			case dto.OperationResponse:
+				operations = append(operations, operation)
+			case dto.OperationResponseTransfer:
+				operations = append(operations, operation.OperationResponse)
 			}
 		}
 	}()
@@ -188,21 +188,21 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 		totalBalance = totalBalance.Add(account.Balance.Div(rate))
 	}
 
-	for _, transaction := range transactions {
-		if transaction.Account.Currency != currency {
-			rate, ok := currencyRates[strings.ToLower(transaction.Account.Currency)]
+	for _, operation := range operations {
+		if operation.Account.Currency != currency {
+			rate, ok := currencyRates[strings.ToLower(operation.Account.Currency)]
 			if !ok || rate.IsZero() {
 				return nil, errCurrencyRateNotFound
 			}
-			transaction.Amount = transaction.Amount.Div(rate)
+			operation.Amount = operation.Amount.Div(rate)
 		}
 
-		switch transaction.Type {
-		case models.TransactionTypeIncome:
-			totalIncome = totalIncome.Add(transaction.Amount)
+		switch operation.Type {
+		case models.OperationTypeIncome:
+			totalIncome = totalIncome.Add(operation.Amount)
 
-		case models.TransactionTypeExpense:
-			totalExpenses = totalExpenses.Add(transaction.Amount)
+		case models.OperationTypeExpense:
+			totalExpenses = totalExpenses.Add(operation.Amount)
 		}
 	}
 
@@ -218,7 +218,7 @@ func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, c
 			plannedOperation.Amount = plannedOperation.Amount.Div(rate)
 		}
 
-		if plannedOperation.Type == models.TransactionTypeExpense {
+		if plannedOperation.Type == models.OperationTypeExpense {
 			availableBalance = availableBalance.Sub(plannedOperation.Amount)
 		}
 	}

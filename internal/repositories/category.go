@@ -28,7 +28,7 @@ func (r *CategoryRepository) Create(ctx context.Context, category *models.Catego
 		RETURNING id, name, icon`
 
 	var resp dto.CategoryResponse
-	if err := sqlscan.Get(ctx, r.db, &resp, q, category.Name, category.Icon, category.UserID); err != nil {
+	if err := sqlscan.Get(ctx, r.db, &resp, q, category.Name, category.Icon, nullUUID(category.UserID)); err != nil {
 		return nil, err
 	}
 	return &resp, nil

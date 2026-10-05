@@ -18,5 +18,5 @@ CREATE TABLE budgets (
 );
 
 CREATE INDEX idx_budgets_user_id ON budgets(user_id);
-CREATE UNIQUE INDEX idx_budgets_user_id_category_id ON budgets(user_id, category_id);
 CREATE TRIGGER update_budgets_updated_at BEFORE UPDATE ON budgets FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_user_id_category_id ON budgets(user_id, category_id);

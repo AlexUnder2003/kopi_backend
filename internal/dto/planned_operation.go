@@ -11,15 +11,15 @@ import (
 )
 
 type PlannedOperationPost struct {
-	Name         string                 `json:"name"`
-	AccountID    uuid.UUID              `json:"account_id"`
-	Amount       decimal.Decimal        `json:"amount"`
-	Type         models.TransactionType `json:"type"`
-	IntervalType models.IntervalType    `json:"interval_type"`
-	Interval     int                    `json:"interval,omitempty"`
-	CategoryID   uuid.UUID              `json:"category_id"`
-	PlannedAt    time.Time              `json:"planned_date"`
-	IsRecurring  bool                   `json:"is_recurring"`
+	Name         string               `json:"name"`
+	AccountID    uuid.UUID            `json:"account_id"`
+	Amount       decimal.Decimal      `json:"amount"`
+	Type         models.OperationType `json:"type"`
+	IntervalType models.IntervalType  `json:"interval_type"`
+	Interval     int                  `json:"interval,omitempty"`
+	CategoryID   uuid.UUID            `json:"category_id"`
+	PlannedAt    time.Time            `json:"planned_date"`
+	IsRecurring  bool                 `json:"is_recurring"`
 }
 
 func (r *PlannedOperationPost) Validate() error {
@@ -29,7 +29,7 @@ func (r *PlannedOperationPost) Validate() error {
 	if !r.Amount.IsPositive() {
 		return errors.New("amount")
 	}
-	if !validTransactionType(r.Type) {
+	if !validOperationType(r.Type) {
 		return errors.New("type")
 	}
 	if !validIntervalType(r.IntervalType) {
@@ -51,19 +51,19 @@ func (r *PlannedOperationPost) Validate() error {
 }
 
 type PlannedOperationUpdate struct {
-	Name         string                 `json:"name,omitempty"`
-	AccountID    uuid.UUID              `json:"account_id,omitempty"`
-	Amount       decimal.Decimal        `json:"amount,omitempty"`
-	Type         models.TransactionType `json:"type,omitempty"`
-	IntervalType models.IntervalType    `json:"interval_type,omitempty"`
-	Interval     int                    `json:"interval,omitempty"`
-	CategoryID   uuid.UUID              `json:"category_id,omitempty"`
-	PlannedAt    time.Time              `json:"planned_date,omitempty"`
-	IsRecurring  *bool                  `json:"is_recurring,omitempty"`
+	Name         string               `json:"name,omitempty"`
+	AccountID    uuid.UUID            `json:"account_id,omitempty"`
+	Amount       decimal.Decimal      `json:"amount,omitempty"`
+	Type         models.OperationType `json:"type,omitempty"`
+	IntervalType models.IntervalType  `json:"interval_type,omitempty"`
+	Interval     int                  `json:"interval,omitempty"`
+	CategoryID   uuid.UUID            `json:"category_id,omitempty"`
+	PlannedAt    time.Time            `json:"planned_date,omitempty"`
+	IsRecurring  *bool                `json:"is_recurring,omitempty"`
 }
 
 func (r *PlannedOperationUpdate) Validate() error {
-	if r.Type != "" && !validTransactionType(r.Type) {
+	if r.Type != "" && !validOperationType(r.Type) {
 		return errors.New("type")
 	}
 	if r.IntervalType != "" && !validIntervalType(r.IntervalType) {
@@ -84,15 +84,15 @@ type PlannedOperationDueResponse struct {
 }
 
 type PlannedOperationResponse struct {
-	ID           uuid.UUID              `json:"id" db:"id"`
-	Name         string                 `json:"name" db:"name"`
-	Account      AccountResponseShort   `json:"account" db:"account"`
-	Amount       decimal.Decimal        `json:"amount" db:"amount"`
-	Type         models.TransactionType `json:"type" db:"type"`
-	IntervalType models.IntervalType    `json:"interval_type" db:"interval_type"`
-	Interval     *int                   `json:"interval" db:"interval"`
-	Category     CategoryResponse       `json:"category" db:"category"`
-	PlannedAt    time.Time              `json:"planned_date" db:"planned_at"`
-	NextRunAt    *time.Time             `json:"next_run_date" db:"next_run_at"`
-	IsRecurring  bool                   `json:"is_recurring" db:"is_recurring"`
+	ID           uuid.UUID            `json:"id" db:"id"`
+	Name         string               `json:"name" db:"name"`
+	Account      AccountResponseShort `json:"account" db:"account"`
+	Amount       decimal.Decimal      `json:"amount" db:"amount"`
+	Type         models.OperationType `json:"type" db:"type"`
+	IntervalType models.IntervalType  `json:"interval_type" db:"interval_type"`
+	Interval     *int                 `json:"interval" db:"interval"`
+	Category     CategoryResponse     `json:"category" db:"category"`
+	PlannedAt    time.Time            `json:"planned_date" db:"planned_at"`
+	NextRunAt    *time.Time           `json:"next_run_date" db:"next_run_at"`
+	IsRecurring  bool                 `json:"is_recurring" db:"is_recurring"`
 }

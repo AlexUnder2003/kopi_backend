@@ -58,7 +58,7 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*
 		budget.UserID,
 		budget.Currency,
 		budget.IntervalType,
-		nullIntPtr(budget.Interval),
+		nullInt(budget.Interval),
 		budget.StartDate,
 		budget.ResetDate,
 		budget.CategoryID,
@@ -122,10 +122,10 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 		nullString(budget.Name),
 		nullDecimal(budget.Amount),
 		nullString(string(budget.IntervalType)),
-		nullIntPtr(budget.Interval),
+		nullInt(budget.Interval),
 		nullTime(budget.StartDate),
 		nullTime(budget.ResetDate),
-		nullBoolPtr(budget.IsActive),
+		budget.IsActive,
 	); err != nil {
 		return nil, err
 	}

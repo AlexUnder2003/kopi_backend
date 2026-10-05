@@ -13,7 +13,8 @@ const (
 func NextDate(date time.Time, intervalType models.IntervalType, interval int) time.Time {
 	var next time.Time
 
-	now := time.Now()
+	now := time.Now().UTC()
+	date = date.UTC()
 
 	for {
 		switch intervalType {
@@ -54,18 +55,4 @@ func effectiveInterval(updated, existing int) int {
 		return existing
 	}
 	return updated
-}
-
-func intervalPtr(n int) *int {
-	if n == 0 {
-		return nil
-	}
-	return &n
-}
-
-func timePtr(t time.Time) *time.Time {
-	if t.IsZero() {
-		return nil
-	}
-	return &t
 }

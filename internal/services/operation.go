@@ -15,52 +15,52 @@ import (
 	"go.uber.org/zap"
 )
 
-const errMsgTransactionNotFound = "not_found_transaction"
+const errMsgOperationNotFound = "not_found_operation"
 
-type TransactionService struct {
-	db              *sql.DB
-	transactionRepo *repositories.TransactionRepository
-	accountRepo     *repositories.AccountRepository
-	budgetRepo      *repositories.BudgetRepository
-	logger          *zap.SugaredLogger
+type OperationService struct {
+	db            *sql.DB
+	operationRepo *repositories.OperationRepository
+	accountRepo   *repositories.AccountRepository
+	budgetRepo    *repositories.BudgetRepository
+	logger        *zap.SugaredLogger
 }
 
-func NewTransactionService(db *sql.DB, logger *zap.SugaredLogger) *TransactionService {
-	return &TransactionService{
-		db:              db,
-		transactionRepo: repositories.NewTransactionRepository(db),
-		accountRepo:     repositories.NewAccountRepository(db),
-		budgetRepo:      repositories.NewBudgetRepository(db),
-		logger:          logger,
+func NewOperationService(db *sql.DB, logger *zap.SugaredLogger) *OperationService {
+	return &OperationService{
+		db:            db,
+		operationRepo: repositories.NewOperationRepository(db),
+		accountRepo:   repositories.NewAccountRepository(db),
+		budgetRepo:    repositories.NewBudgetRepository(db),
+		logger:        logger,
 	}
 }
 
-func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (any, error) {
-	account, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
+func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operation *models.Operation) (any, error) {
+	account, err := s.accountRepo.GetByID(ctx, operation.AccountID)
 	if err != nil {
 		return nil, err
 	}
 
-	switch transaction.Type {
-	case models.TransactionTypeTransfer:
-		fromAccount, err := s.accountRepo.GetByID(ctx, *transaction.FromAccountID)
-		if err != nil {
-			return nil, err
+	switch operation.Type {
+	case models.OperationTypeTransfer:
+		if operation.FromAccountID == uuid.Nil {
+			return nil, apperrors.BadRequest("from account ID is required")
 		}
 
-		if transaction.FromAccountID == nil {
-			return nil, apperrors.BadRequest("from account ID is required")
+		fromAccount, err := s.accountRepo.GetByID(ctx, operation.FromAccountID)
+		if err != nil {
+			return nil, err
 		}
 
 		if fromAccount.Currency != account.Currency {
 			return nil, apperrors.BadRequest("currency mismatch")
 		}
 
-		if fromAccount.Balance.LessThan(transaction.Amount) {
+		if fromAccount.Balance.LessThan(operation.Amount) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
-	case models.TransactionTypeExpense:
-		if account.Balance.LessThan(transaction.Amount) {
+	case models.OperationTypeExpense:
+		if account.Balance.LessThan(operation.Amount) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
 	}
@@ -72,21 +72,21 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, trans
 	}
 	defer tx.Rollback()
 
-	created, err := s.transactionRepo.Create(ctx, transaction, tx)
+	created, err := s.operationRepo.Create(ctx, operation, tx)
 	if err != nil {
-		s.logger.Errorw("failed to create transaction", "error", err)
+		s.logger.Errorw("failed to create operation", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
 	if err := s.applyEffects(
 		ctx,
 		tx,
-		transaction.Type,
-		transaction.AccountID,
-		uuidValue(transaction.FromAccountID),
-		transaction.CategoryID,
+		operation.Type,
+		operation.AccountID,
+		operation.FromAccountID,
+		operation.CategoryID,
 		userID,
-		transaction.Amount,
+		operation.Amount,
 		account.Currency,
 	); err != nil {
 		return nil, err
@@ -100,43 +100,43 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, trans
 	return created.Response(), nil
 }
 
-func (s *TransactionService) GetByID(ctx context.Context, id, userID uuid.UUID) (any, error) {
-	transaction, err := s.get(ctx, id, userID)
+func (s *OperationService) GetByID(ctx context.Context, id, userID uuid.UUID) (any, error) {
+	operation, err := s.get(ctx, id, userID)
 	if err != nil {
 		return nil, err
 	}
-	return transaction.Response(), nil
+	return operation.Response(), nil
 }
 
-func (s *TransactionService) List(ctx context.Context, userID uuid.UUID, params repositories.TransactionListParams) ([]any, error) {
-	transactions, err := s.transactionRepo.List(ctx, params, userID)
+func (s *OperationService) List(ctx context.Context, userID uuid.UUID, params repositories.OperationListParams) ([]any, error) {
+	operations, err := s.operationRepo.List(ctx, params, userID)
 	if err != nil {
-		s.logger.Errorw("failed to list transactions", "error", err)
+		s.logger.Errorw("failed to list operations", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	response := make([]any, len(transactions))
-	for i, transaction := range transactions {
-		response[i] = transaction.Response()
+	response := make([]any, len(operations))
+	for i, operation := range operations {
+		response[i] = operation.Response()
 	}
 	return response, nil
 }
 
-func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, transaction *models.Transaction) (any, error) {
-	existing, err := s.get(ctx, transaction.ID, userID)
+func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operation *models.Operation) (any, error) {
+	existing, err := s.get(ctx, operation.ID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, transaction.AccountID)
+	account, err := s.accountRepo.GetByID(ctx, operation.AccountID)
 	if err != nil {
 		return nil, err
 	}
 
-	delta := transaction.Amount.Sub(existing.Amount)
+	delta := operation.Amount.Sub(existing.Amount)
 
 	switch existing.Type {
-	case models.TransactionTypeTransfer:
+	case models.OperationTypeTransfer:
 		if existing.FromAccount.ID == uuid.Nil {
 			return nil, apperrors.BadRequest("from account ID is required")
 		}
@@ -153,7 +153,7 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 		if delta.IsPositive() && fromAccount.Balance.LessThan(delta) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
-	case models.TransactionTypeExpense:
+	case models.OperationTypeExpense:
 		if delta.IsPositive() && account.Balance.LessThan(delta) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
@@ -166,16 +166,16 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 	}
 	defer tx.Rollback()
 
-	updated, err := s.transactionRepo.Update(ctx, transaction, tx)
+	updated, err := s.operationRepo.Update(ctx, operation, tx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.NotFound(errMsgTransactionNotFound)
+			return nil, apperrors.NotFound(errMsgOperationNotFound)
 		}
-		s.logger.Errorw("failed to update transaction", "error", err)
+		s.logger.Errorw("failed to update operation", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	if !transaction.Amount.IsZero() {
+	if !operation.Amount.IsZero() {
 		if err := s.applyEffects(
 			ctx,
 			tx,
@@ -184,7 +184,7 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 			existing.FromAccount.ID,
 			existing.Category.ID,
 			userID,
-			transaction.Amount.Sub(existing.Amount),
+			operation.Amount.Sub(existing.Amount),
 			account.Currency,
 		); err != nil {
 			return nil, err
@@ -199,13 +199,13 @@ func (s *TransactionService) Update(ctx context.Context, userID uuid.UUID, trans
 	return updated.Response(), nil
 }
 
-func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) error {
-	transaction, err := s.get(ctx, id, userID)
+func (s *OperationService) Delete(ctx context.Context, id, userID uuid.UUID) error {
+	operation, err := s.get(ctx, id, userID)
 	if err != nil {
 		return err
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, transaction.Account.ID)
+	account, err := s.accountRepo.GetByID(ctx, operation.Account.ID)
 	if err != nil {
 		return err
 	}
@@ -217,20 +217,20 @@ func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) e
 	}
 	defer tx.Rollback()
 
-	if err := s.transactionRepo.Delete(ctx, id, tx); err != nil {
-		s.logger.Errorw("failed to delete transaction", "error", err)
+	if err := s.operationRepo.Delete(ctx, id, tx); err != nil {
+		s.logger.Errorw("failed to delete operation", "error", err)
 		return apperrors.Internal(errInternalServerError)
 	}
 
 	if err := s.applyEffects(
 		ctx,
 		tx,
-		transaction.Type,
-		transaction.Account.ID,
-		transaction.FromAccount.ID,
-		transaction.Category.ID,
+		operation.Type,
+		operation.Account.ID,
+		operation.FromAccount.ID,
+		operation.Category.ID,
 		userID,
-		transaction.Amount.Neg(),
+		operation.Amount.Neg(),
 		account.Currency,
 	); err != nil {
 		return err
@@ -244,22 +244,22 @@ func (s *TransactionService) Delete(ctx context.Context, id, userID uuid.UUID) e
 	return nil
 }
 
-func (s *TransactionService) get(ctx context.Context, id, userID uuid.UUID) (*dto.TransactionResponseTransfer, error) {
-	transaction, err := s.transactionRepo.GetByID(ctx, id, userID)
+func (s *OperationService) get(ctx context.Context, id, userID uuid.UUID) (*dto.OperationResponseTransfer, error) {
+	operation, err := s.operationRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, apperrors.NotFound(errMsgTransactionNotFound)
+			return nil, apperrors.NotFound(errMsgOperationNotFound)
 		}
-		s.logger.Errorw("failed to get transaction", "error", err)
+		s.logger.Errorw("failed to get operation", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
-	return transaction, nil
+	return operation, nil
 }
 
-func (s *TransactionService) applyEffects(
+func (s *OperationService) applyEffects(
 	ctx context.Context,
 	tx *sql.Tx,
-	txType models.TransactionType,
+	opType models.OperationType,
 	accountID, fromAccountID, categoryID, userID uuid.UUID,
 	amount decimal.Decimal,
 	currency string,
@@ -270,8 +270,8 @@ func (s *TransactionService) applyEffects(
 		return apperrors.Internal(errInternalServerError)
 	}
 
-	switch txType {
-	case models.TransactionTypeTransfer:
+	switch opType {
+	case models.OperationTypeTransfer:
 		if err := s.accountRepo.UpdateBalance(ctx, accountID, amount, tx); err != nil {
 			s.logger.Errorw("failed to update account balance", "error", err)
 			return apperrors.Internal(errInternalServerError)
@@ -281,13 +281,13 @@ func (s *TransactionService) applyEffects(
 			return apperrors.Internal(errInternalServerError)
 		}
 	default:
-		if err := s.accountRepo.UpdateBalance(ctx, accountID, signed(txType, amount), tx); err != nil {
+		if err := s.accountRepo.UpdateBalance(ctx, accountID, signed(opType, amount), tx); err != nil {
 			s.logger.Errorw("failed to update account balance", "error", err)
 			return apperrors.Internal(errInternalServerError)
 		}
 
-		if txType == models.TransactionTypeExpense && budgetID != uuid.Nil {
-			if err := s.budgetRepo.UpdateBalance(ctx, budgetID, signed(txType, amount), tx); err != nil {
+		if opType == models.OperationTypeExpense && budgetID != uuid.Nil {
+			if err := s.budgetRepo.UpdateBalance(ctx, budgetID, signed(opType, amount), tx); err != nil {
 				s.logger.Errorw("failed to update budget balance", "error", err)
 				return apperrors.Internal(errInternalServerError)
 			}
@@ -297,15 +297,8 @@ func (s *TransactionService) applyEffects(
 	return nil
 }
 
-func uuidValue(id *uuid.UUID) uuid.UUID {
-	if id == nil {
-		return uuid.Nil
-	}
-	return *id
-}
-
-func signed(txType models.TransactionType, amount decimal.Decimal) decimal.Decimal {
-	if txType == models.TransactionTypeExpense {
+func signed(opType models.OperationType, amount decimal.Decimal) decimal.Decimal {
+	if opType == models.OperationTypeExpense {
 		return amount.Neg()
 	}
 	return amount
