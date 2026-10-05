@@ -24,6 +24,7 @@ func (h *UserHandler) Register(g *echo.Group) {
 	auth.POST("/otp", h.SendOTP)
 	auth.POST("/login", h.Login)
 	auth.POST("/logout", h.Logout)
+	auth.POST("/refresh", h.RefreshToken)
 
 	users := g.Group("/users")
 	users.Use(middleware.UserMiddleware)
@@ -86,6 +87,23 @@ func (h *UserHandler) GetMe(c *echo.Context) error {
 	}
 
 	resp, err := h.userService.GetByID(c.Request().Context(), userID)
+	if err != nil {
+		return mapAppError(err)
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *UserHandler) RefreshToken(c *echo.Context) error {
+	var req dto.RefreshTokenRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
+	}
+	if err := req.Validate(); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	resp, err := h.userService.Refresh(c.Request().Context(), req.RefreshToken)
 	if err != nil {
 		return mapAppError(err)
 	}

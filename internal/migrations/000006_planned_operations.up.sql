@@ -1,7 +1,7 @@
 CREATE TABLE planned_operations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
-    account_id UUID NOT NULL REFERENCES accounts(id),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     amount NUMERIC(19, 4) NOT NULL,
     type transaction_type NOT NULL,
     interval_type interval_type NOT NULL,

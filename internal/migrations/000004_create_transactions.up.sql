@@ -4,7 +4,7 @@ CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     type transaction_type NOT NULL,
-    account_id UUID NOT NULL REFERENCES accounts(id),
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     from_account_id UUID REFERENCES accounts(id),
     category_id UUID NOT NULL REFERENCES categories(id),
     amount NUMERIC(19, 4) NOT NULL,
