@@ -197,6 +197,28 @@ func (r *PlannedOperationRepository) BulkUpdate(ctx context.Context, ops []model
 	return err
 }
 
+func (r *PlannedOperationRepository) GetNearestIncomeDate(
+	ctx context.Context,
+	userID uuid.UUID,
+	from time.Time,
+) (*time.Time, error) {
+	const q = `
+		SELECT p.next_run_at
+		FROM planned_operations p
+		JOIN accounts a ON a.id = p.account_id
+		WHERE a.user_id = $1
+			AND p.type = 'income'
+			AND p.next_run_at >= $2
+		ORDER BY p.next_run_at ASC
+		LIMIT 1`
+
+	var nextRunAt time.Time
+	if err := r.db.QueryRowContext(ctx, q, userID, from).Scan(&nextRunAt); err != nil {
+		return nil, err
+	}
+	return &nextRunAt, nil
+}
+
 func (r *PlannedOperationRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	const q = `DELETE FROM planned_operations WHERE id = $1`
 

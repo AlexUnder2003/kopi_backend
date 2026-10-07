@@ -264,6 +264,23 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	return nil
 }
 
+func (s *PlannedOperationService) GetNearestIncomeDate(
+	ctx context.Context,
+	userID uuid.UUID,
+	from time.Time,
+) (*time.Time, error) {
+	nextRunAt, err := s.plannedOperationRepo.GetNearestIncomeDate(ctx, userID, from)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		s.logger.Errorw("failed to get nearest planned income", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	return nextRunAt, nil
+}
+
 func nextRunAt(plannedAt time.Time, intervalType models.IntervalType, interval int) time.Time {
 	if plannedAt.After(time.Now()) {
 		return plannedAt

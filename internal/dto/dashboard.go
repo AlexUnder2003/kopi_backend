@@ -2,6 +2,7 @@ package dto
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/shopspring/decimal"
 )
@@ -11,6 +12,8 @@ type Dashboard struct {
 	AvailableBalance decimal.Decimal `json:"available_balance"`
 	TotalIncome      decimal.Decimal `json:"total_income"`
 	TotalExpenses    decimal.Decimal `json:"total_expenses"`
+	PlannedExpenses  decimal.Decimal `json:"planned_expenses"`
+	DateEnd          time.Time       `json:"date_end"`
 }
 
 type CurrencyResponse struct {
