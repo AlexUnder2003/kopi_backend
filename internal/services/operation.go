@@ -136,9 +136,16 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 		return nil, err
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, operation.AccountID)
+	account, err := s.accountRepo.GetByID(ctx, existing.Account.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	if operation.AccountID != uuid.Nil {
+		account, err = s.accountRepo.GetByID(ctx, operation.AccountID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	delta := operation.Amount.Sub(existing.Amount)

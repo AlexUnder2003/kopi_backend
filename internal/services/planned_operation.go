@@ -154,7 +154,14 @@ func (s *PlannedOperationService) Delete(ctx context.Context, id, userID uuid.UU
 }
 
 func (s *PlannedOperationService) Execute(ctx context.Context) error {
-	ops, err := s.plannedOperationRepo.GetByNextRunAt(ctx, time.Now().UTC())
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	ops, err := s.plannedOperationRepo.GetByNextRunAt(ctx, time.Now().UTC(), tx)
 	if err != nil {
 		s.logger.Errorw("failed to get planned operations by next run at", "error", err)
 		return apperrors.Internal(errInternalServerError)
@@ -163,13 +170,6 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	if len(ops) == 0 {
 		return nil
 	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		s.logger.Errorw("failed to begin transaction", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-	defer tx.Rollback()
 
 	operations, accountUpdates, budgetUpdates, updatedOps := newPlannedExecution(len(ops))
 
@@ -192,7 +192,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			Type:           op.Type,
 			AccountID:      op.Account.ID,
 			Amount:         op.Amount,
-			OccurrenceDate: op.PlannedAt,
+			OccurrenceDate: time.Now().UTC(),
 			CategoryID:     op.Category.ID,
 		})
 

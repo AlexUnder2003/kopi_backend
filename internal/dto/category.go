@@ -28,4 +28,5 @@ type CategoryResponse struct {
 	Name     string    `json:"name" db:"name"`
 	Icon     string    `json:"icon" db:"icon"`
 	IsSystem bool      `json:"is_system" db:"is_system"`
+	UserID   uuid.UUID `json:"-" db:"user_id"`
 }

@@ -78,7 +78,8 @@ func (h *CategoryHandler) List(c *echo.Context) error {
 }
 
 func (h *CategoryHandler) GetByID(c *echo.Context) error {
-	if _, err := utils.GetUserIDFromContext(c); err != nil {
+	userID, err := utils.GetUserIDFromContext(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -87,7 +88,7 @@ func (h *CategoryHandler) GetByID(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	resp, err := h.categoryService.GetByID(c.Request().Context(), id)
+	resp, err := h.categoryService.GetByID(c.Request().Context(), id, userID)
 	if err != nil {
 		return mapAppError(err)
 	}
@@ -96,7 +97,8 @@ func (h *CategoryHandler) GetByID(c *echo.Context) error {
 }
 
 func (h *CategoryHandler) Update(c *echo.Context) error {
-	if _, err := utils.GetUserIDFromContext(c); err != nil {
+	userID, err := utils.GetUserIDFromContext(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -110,7 +112,7 @@ func (h *CategoryHandler) Update(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 
-	resp, err := h.categoryService.Update(c.Request().Context(), &models.Category{
+	resp, err := h.categoryService.Update(c.Request().Context(), userID, &models.Category{
 		ID:   id,
 		Name: req.Name,
 		Icon: req.Icon,
@@ -123,7 +125,8 @@ func (h *CategoryHandler) Update(c *echo.Context) error {
 }
 
 func (h *CategoryHandler) Delete(c *echo.Context) error {
-	if _, err := utils.GetUserIDFromContext(c); err != nil {
+	userID, err := utils.GetUserIDFromContext(c)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
@@ -132,7 +135,7 @@ func (h *CategoryHandler) Delete(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 	}
 
-	if err := h.categoryService.Delete(c.Request().Context(), id); err != nil {
+	if err := h.categoryService.Delete(c.Request().Context(), id, userID); err != nil {
 		return mapAppError(err)
 	}
 

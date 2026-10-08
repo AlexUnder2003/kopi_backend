@@ -14,10 +14,11 @@ import (
 const transferCategoryName = "Переводы"
 
 const categorySelectColumns = `
-	id,
-	name,
-	icon,
-	CASE WHEN user_id IS NULL THEN TRUE ELSE FALSE END AS is_system`
+		id,
+		name,
+		icon,
+		CASE WHEN user_id IS NULL THEN TRUE ELSE FALSE END AS is_system,
+		user_id`
 
 type CategoryRepository struct {
 	db *sql.DB

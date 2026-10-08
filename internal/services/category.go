@@ -45,7 +45,7 @@ func (s *CategoryService) Create(ctx context.Context, category *models.Category)
 	return cat, nil
 }
 
-func (s *CategoryService) GetByID(ctx context.Context, id uuid.UUID) (*dto.CategoryResponse, error) {
+func (s *CategoryService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto.CategoryResponse, error) {
 	cat, err := s.categoryRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -66,9 +66,18 @@ func (s *CategoryService) List(ctx context.Context, userID uuid.UUID, params rep
 	return categories, nil
 }
 
-func (s *CategoryService) Update(ctx context.Context, category *models.Category) (*dto.CategoryResponse, error) {
-	if _, err := s.GetByID(ctx, category.ID); err != nil {
+func (s *CategoryService) Update(ctx context.Context, userID uuid.UUID, category *models.Category) (*dto.CategoryResponse, error) {
+	cat, err := s.GetByID(ctx, category.ID, userID)
+	if err != nil {
 		return nil, err
+	}
+
+	if cat.IsSystem {
+		return nil, apperrors.BadRequest("cannot update default category")
+	}
+
+	if cat.UserID != userID {
+		return nil, apperrors.BadRequest("cannot update category not owned by user")
 	}
 
 	updated, err := s.categoryRepo.Update(ctx, category)
@@ -83,9 +92,18 @@ func (s *CategoryService) Update(ctx context.Context, category *models.Category)
 	return updated, nil
 }
 
-func (s *CategoryService) Delete(ctx context.Context, id uuid.UUID) error {
-	if _, err := s.GetByID(ctx, id); err != nil {
+func (s *CategoryService) Delete(ctx context.Context, id, userID uuid.UUID) error {
+	cat, err := s.GetByID(ctx, id, userID)
+	if err != nil {
 		return err
+	}
+
+	if cat.IsSystem {
+		return apperrors.BadRequest("cannot delete default category")
+	}
+
+	if cat.UserID != userID {
+		return apperrors.BadRequest("cannot delete category not owned by user")
 	}
 
 	if err := s.categoryRepo.Delete(ctx, id); err != nil {

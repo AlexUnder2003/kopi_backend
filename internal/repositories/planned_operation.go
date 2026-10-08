@@ -155,7 +155,7 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 	return &resp, nil
 }
 
-func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time) ([]dto.PlannedOperationDueResponse, error) {
+func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time, tx *sql.Tx) ([]dto.PlannedOperationDueResponse, error) {
 	const q = `
 		SELECT ` + plannedOperationSelectColumns + `,
 			a.user_id
@@ -166,7 +166,7 @@ func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRun
 		ORDER BY p.next_run_at
 		FOR UPDATE SKIP LOCKED`
 	var resp []dto.PlannedOperationDueResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, nextRunAt); err != nil {
+	if err := sqlscan.Select(ctx, DBorTx(r.db, tx), &resp, q, nextRunAt); err != nil {
 		return nil, err
 	}
 	return resp, nil
