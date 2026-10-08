@@ -171,20 +171,11 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	operations := make([]models.Operation, 0, len(ops))
-	accountUpdates := make([]dto.AccountBalanceUpdate, 0, len(ops))
-	var budgetUpdates []dto.BudgetBalanceUpdate
-	updatedOps := make([]models.PlannedOperation, 0, len(ops))
+	operations, accountUpdates, budgetUpdates, updatedOps := newPlannedExecution(len(ops))
 
-	accounts, err := s.accountRepo.GetByIDs(ctx, ops)
+	balances, err := s.getBalances(ctx, ops)
 	if err != nil {
-		s.logger.Errorw("failed to get accounts", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	balances := make(map[uuid.UUID]decimal.Decimal, len(accounts))
-	for _, account := range accounts {
-		balances[account.ID] = account.Balance
+		return err
 	}
 
 	for _, op := range ops {
@@ -236,32 +227,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 		}
 	}
 
-	if err := s.operationRepo.BulkCreate(ctx, operations, tx); err != nil {
-		s.logger.Errorw("failed to bulk create operations", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	if err := s.accountRepo.BulkUpdateBalance(ctx, accountUpdates, tx); err != nil {
-		s.logger.Errorw("failed to bulk update account balances", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	if err := s.budgetRepo.BulkUpdateBalance(ctx, budgetUpdates, tx); err != nil {
-		s.logger.Errorw("failed to bulk update budget balances", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	if err := s.plannedOperationRepo.BulkUpdate(ctx, updatedOps, tx); err != nil {
-		s.logger.Errorw("failed to bulk update planned operations", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	if err := tx.Commit(); err != nil {
-		s.logger.Errorw("failed to commit transaction", "error", err)
-		return apperrors.Internal(errInternalServerError)
-	}
-
-	return nil
+	return s.applyExecution(ctx, tx, operations, accountUpdates, budgetUpdates, updatedOps)
 }
 
 func (s *PlannedOperationService) GetNearestIncomeDate(
@@ -290,4 +256,61 @@ func nextRunAt(plannedAt time.Time, intervalType models.IntervalType, interval i
 
 func scheduleChanged(op *dto.PlannedOperationUpdate) bool {
 	return !op.PlannedAt.IsZero() || op.IntervalType != "" || op.Interval != 0
+}
+
+func newPlannedExecution(n int) ([]models.Operation, []dto.AccountBalanceUpdate, []dto.BudgetBalanceUpdate, []models.PlannedOperation) {
+	return make([]models.Operation, 0, n),
+		make([]dto.AccountBalanceUpdate, 0, n),
+		make([]dto.BudgetBalanceUpdate, 0, n),
+		make([]models.PlannedOperation, 0, n)
+}
+
+func (s *PlannedOperationService) applyExecution(
+	ctx context.Context,
+	tx *sql.Tx,
+	operations []models.Operation,
+	accountUpdates []dto.AccountBalanceUpdate,
+	budgetUpdates []dto.BudgetBalanceUpdate,
+	updatedOps []models.PlannedOperation,
+) error {
+	if err := s.operationRepo.BulkCreate(ctx, operations, tx); err != nil {
+		s.logger.Errorw("failed to bulk create operations", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.accountRepo.BulkUpdateBalance(ctx, accountUpdates, tx); err != nil {
+		s.logger.Errorw("failed to bulk update account balances", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.budgetRepo.BulkUpdateBalance(ctx, budgetUpdates, tx); err != nil {
+		s.logger.Errorw("failed to bulk update budget balances", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := s.plannedOperationRepo.BulkUpdate(ctx, updatedOps, tx); err != nil {
+		s.logger.Errorw("failed to bulk update planned operations", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	return nil
+}
+
+func (s *PlannedOperationService) getBalances(ctx context.Context, ops []dto.PlannedOperationDueResponse) (map[uuid.UUID]decimal.Decimal, error) {
+	accounts, err := s.accountRepo.GetByIDs(ctx, ops)
+	if err != nil {
+		s.logger.Errorw("failed to get accounts", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	balances := make(map[uuid.UUID]decimal.Decimal, len(accounts))
+	for _, account := range accounts {
+		balances[account.ID] = account.Balance
+	}
+	return balances, nil
 }
