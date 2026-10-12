@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -137,6 +138,26 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 	}
 
 	return updated, nil
+}
+
+func (s *BudgetService) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, currency string, tx *sql.Tx) (uuid.UUID, error) {
+	id, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, currency, tx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, nil
+		}
+		s.logger.Errorw("failed to get budget by category ID", "error", err)
+		return uuid.Nil, apperrors.Internal(errInternalServerError)
+	}
+	return id, nil
+}
+
+func (s *BudgetService) UpdateBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	if err := s.budgetRepo.UpdateBalance(ctx, id, delta, tx); err != nil {
+		s.logger.Errorw("failed to update budget balance", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
 }
 
 func (s *BudgetService) Delete(ctx context.Context, id, userID uuid.UUID) error {

@@ -122,6 +122,14 @@ func (s *AccountService) Update(ctx context.Context, userID uuid.UUID, account *
 	return updatedAccount, nil
 }
 
+func (s *AccountService) UpdateBalance(ctx context.Context, accountID uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	if err := s.accountRepo.UpdateBalance(ctx, accountID, delta, tx); err != nil {
+		s.logger.Errorw("failed to update account balance", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
+}
+
 func (s *AccountService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err

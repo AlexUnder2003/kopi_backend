@@ -18,31 +18,27 @@ import (
 const errMsgOperationNotFound = "not_found_operation"
 
 type OperationService struct {
-	db            *sql.DB
-	operationRepo *repositories.OperationRepository
-	accountRepo   *repositories.AccountRepository
-	budgetRepo    *repositories.BudgetRepository
-	logger        *zap.SugaredLogger
+	db             *sql.DB
+	operationRepo  *repositories.OperationRepository
+	accountService *AccountService
+	budgetService  *BudgetService
+	logger         *zap.SugaredLogger
 }
 
-func NewOperationService(db *sql.DB, logger *zap.SugaredLogger) *OperationService {
+func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, logger *zap.SugaredLogger) *OperationService {
 	return &OperationService{
-		db:            db,
-		operationRepo: repositories.NewOperationRepository(db),
-		accountRepo:   repositories.NewAccountRepository(db),
-		budgetRepo:    repositories.NewBudgetRepository(db),
-		logger:        logger,
+		db:             db,
+		operationRepo:  repositories.NewOperationRepository(db),
+		accountService: accountService,
+		budgetService:  budgetService,
+		logger:         logger,
 	}
 }
 
 func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operation *models.Operation) (any, error) {
-	account, err := s.accountRepo.GetByID(ctx, operation.AccountID)
+	account, err := s.accountService.GetByID(ctx, operation.AccountID, userID)
 	if err != nil {
 		return nil, err
-	}
-
-	if account.UserID != userID {
-		return nil, apperrors.NotFound(errMsgAccountNotFound)
 	}
 
 	switch operation.Type {
@@ -51,13 +47,9 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 			return nil, apperrors.BadRequest("from account ID is required")
 		}
 
-		fromAccount, err := s.accountRepo.GetByID(ctx, operation.FromAccountID)
+		fromAccount, err := s.accountService.GetByID(ctx, operation.FromAccountID, userID)
 		if err != nil {
 			return nil, err
-		}
-
-		if fromAccount.UserID != userID {
-			return nil, apperrors.NotFound(errMsgAccountNotFound)
 		}
 
 		if fromAccount.Currency != account.Currency {
@@ -136,13 +128,25 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 		return nil, err
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, existing.Account.ID)
+	accountID := existing.Account.ID
+	if operation.AccountID != uuid.Nil {
+		accountID = operation.AccountID
+	}
+
+	account, err := s.accountService.GetByID(ctx, accountID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if operation.AccountID != uuid.Nil {
-		account, err = s.accountRepo.GetByID(ctx, operation.AccountID)
+	fromAccountID := existing.FromAccount.ID
+
+	if operation.FromAccountID != uuid.Nil {
+		fromAccountID = operation.FromAccountID
+	}
+
+	var fromAccount *dto.AccountResponse
+	if fromAccountID != uuid.Nil {
+		fromAccount, err = s.accountService.GetByID(ctx, fromAccountID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -152,13 +156,8 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 
 	switch existing.Type {
 	case models.OperationTypeTransfer:
-		if existing.FromAccount.ID == uuid.Nil {
+		if fromAccount == nil {
 			return nil, apperrors.BadRequest("from account ID is required")
-		}
-
-		fromAccount, err := s.accountRepo.GetByID(ctx, existing.FromAccount.ID)
-		if err != nil {
-			return nil, err
 		}
 
 		if fromAccount.Currency != account.Currency {
@@ -220,7 +219,7 @@ func (s *OperationService) Delete(ctx context.Context, id, userID uuid.UUID) err
 		return err
 	}
 
-	account, err := s.accountRepo.GetByID(ctx, operation.Account.ID)
+	account, err := s.accountService.GetByID(ctx, operation.Account.ID, userID)
 	if err != nil {
 		return err
 	}
@@ -279,32 +278,27 @@ func (s *OperationService) applyEffects(
 	amount decimal.Decimal,
 	currency string,
 ) error {
-	budgetID, err := s.budgetRepo.GetByCategoryID(ctx, userID, categoryID, currency, tx)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		s.logger.Errorw("failed to get budget by category ID", "error", err)
-		return apperrors.Internal(errInternalServerError)
+	budgetID, err := s.budgetService.GetByCategoryID(ctx, userID, categoryID, currency, tx)
+	if err != nil {
+		return err
 	}
 
 	switch opType {
 	case models.OperationTypeTransfer:
-		if err := s.accountRepo.UpdateBalance(ctx, accountID, amount, tx); err != nil {
-			s.logger.Errorw("failed to update account balance", "error", err)
-			return apperrors.Internal(errInternalServerError)
+		if err := s.accountService.UpdateBalance(ctx, accountID, amount, tx); err != nil {
+			return err
 		}
-		if err := s.accountRepo.UpdateBalance(ctx, fromAccountID, amount.Neg(), tx); err != nil {
-			s.logger.Errorw("failed to update account balance", "error", err)
-			return apperrors.Internal(errInternalServerError)
+		if err := s.accountService.UpdateBalance(ctx, fromAccountID, amount.Neg(), tx); err != nil {
+			return err
 		}
 	default:
-		if err := s.accountRepo.UpdateBalance(ctx, accountID, signed(opType, amount), tx); err != nil {
-			s.logger.Errorw("failed to update account balance", "error", err)
-			return apperrors.Internal(errInternalServerError)
+		if err := s.accountService.UpdateBalance(ctx, accountID, signed(opType, amount), tx); err != nil {
+			return err
 		}
 
 		if opType == models.OperationTypeExpense && budgetID != uuid.Nil {
-			if err := s.budgetRepo.UpdateBalance(ctx, budgetID, signed(opType, amount), tx); err != nil {
-				s.logger.Errorw("failed to update budget balance", "error", err)
-				return apperrors.Internal(errInternalServerError)
+			if err := s.budgetService.UpdateBalance(ctx, budgetID, signed(opType, amount), tx); err != nil {
+				return err
 			}
 		}
 	}

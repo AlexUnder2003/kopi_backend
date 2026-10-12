@@ -46,8 +46,8 @@ func NewApp() *App {
 	userService := services.NewUserService(database, cfg, sugaredLogger)
 	accountService := services.NewAccountService(database, cfg, sugaredLogger)
 	categoryService := services.NewCategoryService(database, sugaredLogger)
-	operationService := services.NewOperationService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
+	operationService := services.NewOperationService(database, accountService, budgetService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
 	dashboardService := services.NewDashboardService(cfg, accountService, operationService, budgetService, plannedOperationService)
 

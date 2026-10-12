@@ -102,6 +102,12 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 		return nil, err
 	}
 
+	if op.AccountID != uuid.Nil {
+		if _, err := s.accountService.GetByID(ctx, op.AccountID, userID); err != nil {
+			return nil, err
+		}
+	}
+
 	isRecurring := existing.IsRecurring
 	if op.IsRecurring != nil {
 		isRecurring = *op.IsRecurring
