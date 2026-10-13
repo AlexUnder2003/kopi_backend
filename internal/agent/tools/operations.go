@@ -82,9 +82,8 @@ func (t *OperationsToolkit) listTool() (tool.Tool, error) {
 
 func (t *OperationsToolkit) createTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
-		Name:                "create_operation",
-		Description:         "Создаёт доход, расход или перевод между счетами. Перед вызовом нужно подтверждение пользователя.",
-		RequireConfirmation: true,
+		Name:        "create_operation",
+		Description: "Создаёт доход, расход или перевод между счетами.",
 	}, func(ctx adkagent.Context, args agentdto.CreateOperationArgs) (agentdto.OperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {

@@ -87,9 +87,8 @@ func (t *PlannedOperationsToolkit) listTool() (tool.Tool, error) {
 
 func (t *PlannedOperationsToolkit) createTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
-		Name:                "create_planned_operation",
-		Description:         "Планирует будущий доход или расход, разово или по расписанию. Перед вызовом нужно подтверждение пользователя.",
-		RequireConfirmation: true,
+		Name:        "create_planned_operation",
+		Description: "Планирует будущий доход или расход, разово или по расписанию.",
 	}, func(ctx adkagent.Context, args agentdto.CreatePlannedOperationArgs) (agentdto.PlannedOperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
