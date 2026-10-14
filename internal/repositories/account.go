@@ -100,6 +100,16 @@ func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID, params L
 	return resp, nil
 }
 
+func (r *AccountRepository) CountByUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	const q = `SELECT COUNT(*) FROM accounts WHERE user_id = $1`
+
+	var count int
+	if err := r.db.QueryRowContext(ctx, q, userID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *AccountRepository) Update(ctx context.Context, account *models.Account) (*dto.AccountResponse, error) {
 	const q = `
 		UPDATE accounts AS a

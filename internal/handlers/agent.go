@@ -43,13 +43,18 @@ func (h *AgentHandler) Send(c *echo.Context) error {
 		return mapAgentValidationErrors(err)
 	}
 
+	msgs, err := h.agentService.Send(c.Request().Context(), userID, &req)
+	if err != nil {
+		return mapAppError(err)
+	}
+
 	w := c.Response()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 
-	for msg := range h.agentService.Send(c.Request().Context(), userID, &req) {
+	for msg := range msgs {
 		payload, err := json.Marshal(msg)
 		if err != nil {
 			return err

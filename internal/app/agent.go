@@ -43,6 +43,7 @@ func NewAgent() *Agent {
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
 	operationService := services.NewOperationService(database, accountService, budgetService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
+	subscriptionService := services.NewSubscriptionService(database, sugaredLogger)
 
 	toolset, err := agenttools.Collect(accountService, categoryService, operationService, plannedOperationService)
 	if err != nil {
@@ -54,7 +55,7 @@ func NewAgent() *Agent {
 		panic(err)
 	}
 
-	agentService, err := services.NewAgentService(context.Background(), *agentCfg, sugaredLogger, toolset)
+	agentService, err := services.NewAgentService(context.Background(), database, *agentCfg, sugaredLogger, toolset, subscriptionService)
 	if err != nil {
 		panic(err)
 	}

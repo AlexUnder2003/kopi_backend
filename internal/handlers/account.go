@@ -68,17 +68,7 @@ func (h *AccountHandler) List(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
 	}
 
-	var currency *string
-	if value := c.QueryParam("currency"); value != "" {
-		if !dto.ValidCurrency(value) {
-			return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
-		}
-		currency = &value
-	}
-
-	if currency == nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
-	}
+	currency := c.QueryParam("currency")
 
 	params, err := listParams(c)
 	if err != nil {

@@ -25,20 +25,38 @@ const (
 )
 
 type AccountService struct {
-	accountRepo *repositories.AccountRepository
-	config      *config.AppConfig
-	logger      *zap.SugaredLogger
+	accountRepo         *repositories.AccountRepository
+	subscriptionService *SubscriptionService
+	config              *config.AppConfig
+	logger              *zap.SugaredLogger
 }
 
 func NewAccountService(db *sql.DB, config *config.AppConfig, logger *zap.SugaredLogger) *AccountService {
 	return &AccountService{
-		accountRepo: repositories.NewAccountRepository(db),
-		config:      config,
-		logger:      logger,
+		accountRepo:         repositories.NewAccountRepository(db),
+		subscriptionService: NewSubscriptionService(db, logger),
+		config:              config,
+		logger:              logger,
 	}
 }
 
 func (s *AccountService) Create(ctx context.Context, account *models.Account) (*dto.AccountResponse, error) {
+	hasAccess, err := s.subscriptionService.HasAccess(ctx, account.UserID, models.SubscriptionPlanPro)
+	if err != nil {
+		s.logger.Errorw("failed to check subscription plan", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	accountsCount, err := s.accountRepo.CountByUser(ctx, account.UserID)
+	if err != nil {
+		s.logger.Errorw("failed to count accounts", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if accountsCount >= 3 && !hasAccess {
+		return nil, apperrors.Forbidden(errMsgSubscriptionPlanProRequired)
+	}
+
 	acc, err := s.accountRepo.Create(ctx, account)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -70,30 +88,33 @@ func (s *AccountService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dt
 	return acc, nil
 }
 
-func (s *AccountService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams, currency *string) (*dto.AccountResponseList, error) {
+func (s *AccountService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams, currency string) (*dto.AccountResponseList, error) {
 	accounts, err := s.accountRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list accounts", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	rates, err := GetCurrencyRates(s.config, strings.ToLower(*currency))
-	if err != nil {
-		s.logger.Errorw("failed to get currency rates", "error", err)
-		return nil, apperrors.Internal(errInternalServerError)
-	}
-
 	var totalBalance decimal.Decimal
-	for _, account := range accounts {
-		if account.Currency == *currency {
-			totalBalance = totalBalance.Add(account.Balance)
-		} else {
-			rate, ok := rates[strings.ToLower(account.Currency)]
-			if !ok || rate.IsZero() {
-				return nil, apperrors.NotFound(errMsgCurrencyRateNotFound)
-			}
 
-			totalBalance = totalBalance.Add(account.Balance.Div(rate))
+	if currency != "" {
+		rates, err := GetCurrencyRates(s.config, strings.ToLower(currency))
+		if err != nil {
+			s.logger.Errorw("failed to get currency rates", "error", err)
+			return nil, apperrors.Internal(errInternalServerError)
+		}
+
+		for _, account := range accounts {
+			if account.Currency == currency {
+				totalBalance = totalBalance.Add(account.Balance)
+			} else {
+				rate, ok := rates[strings.ToLower(account.Currency)]
+				if !ok || rate.IsZero() {
+					return nil, apperrors.NotFound(errMsgCurrencyRateNotFound)
+				}
+
+				totalBalance = totalBalance.Add(account.Balance.Div(rate))
+			}
 		}
 	}
 

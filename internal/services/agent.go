@@ -2,11 +2,17 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
+	"time"
 
 	"KopiBackend/internal/agent"
+	"KopiBackend/internal/apperrors"
 	"KopiBackend/internal/config"
 	"KopiBackend/internal/dto"
+	"KopiBackend/internal/models"
+	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -17,14 +23,21 @@ import (
 	"google.golang.org/genai"
 )
 
-const agentAppName = "kopi"
+const (
+	agentAppName             = "kopi"
+	errMsgForbidden          = "agent_forbidden"
+	errMsgAgentQuotaExceeded = "agent_quota_exceeded"
+	defaultAIExecutionQuota  = 15
+)
 
 type AgentService struct {
-	runner *runner.Runner
-	logger *zap.SugaredLogger
+	runner              *runner.Runner
+	subscriptionService *SubscriptionService
+	aiExecutionRepo     *repositories.AIExecutionRepository
+	logger              *zap.SugaredLogger
 }
 
-func NewAgentService(ctx context.Context, cfg config.AgentConfig, logger *zap.SugaredLogger, tools []tool.Tool) (*AgentService, error) {
+func NewAgentService(ctx context.Context, db *sql.DB, cfg config.AgentConfig, logger *zap.SugaredLogger, tools []tool.Tool, subscriptionService *SubscriptionService) (*AgentService, error) {
 	if cfg.Name == "" {
 		cfg.Name = agentAppName
 	}
@@ -49,14 +62,19 @@ func NewAgentService(ctx context.Context, cfg config.AgentConfig, logger *zap.Su
 	}
 
 	return &AgentService{
-		runner: adkRunner,
-		logger: logger,
+		runner:              adkRunner,
+		subscriptionService: subscriptionService,
+		aiExecutionRepo:     repositories.NewAIExecutionRepository(db),
+		logger:              logger,
 	}, nil
 }
 
-func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.AgentMessagePost) <-chan dto.AgentMessageResponse {
-	out := make(chan dto.AgentMessageResponse)
+func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.AgentMessagePost) (<-chan dto.AgentMessageResponse, error) {
+	if err := s.ensureQuota(ctx, userID); err != nil {
+		return nil, err
+	}
 
+	out := make(chan dto.AgentMessageResponse)
 	go func() {
 		defer close(out)
 
@@ -65,34 +83,92 @@ func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.Agen
 			sessionID = uuid.NewString()
 		}
 
-		streamed := false
+		used := false
+
 		for event, err := range s.runner.Run(ctx, userID.String(), sessionID, genai.NewContentFromText(req.Message, genai.RoleUser), adkagent.RunConfig{
 			StreamingMode: adkagent.StreamingModeSSE,
 		}) {
 			if err != nil {
 				s.logger.Errorw("agent run failed", "error", err, "user_id", userID)
-				return
+				break
 			}
 
 			text := modelText(event)
-			if text == "" {
+			if text == "" || !event.Partial {
 				continue
 			}
 
-			if event.Partial {
-				streamed = true
-			} else if streamed {
-				continue
-			}
+			used = true
 
 			select {
 			case <-ctx.Done():
-				return
 			case out <- dto.AgentMessageResponse{SessionID: sessionID, Message: text}:
 			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
+
+		if !used {
+			return
+		}
+
+		if err := s.consumeQuota(context.WithoutCancel(ctx), userID); err != nil {
+			s.logger.Errorw("failed to consume ai quota", "error", err, "user_id", userID)
 		}
 	}()
-	return out
+
+	return out, nil
+}
+
+func (s *AgentService) ensureQuota(ctx context.Context, userID uuid.UUID) error {
+	execution, err := s.aiExecutionRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		s.logger.Errorw("failed to get ai execution", "error", err, "user_id", userID)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if execution.LeftQuota <= 0 {
+		return apperrors.Forbidden(errMsgAgentQuotaExceeded)
+	}
+
+	return nil
+}
+
+func (s *AgentService) consumeQuota(ctx context.Context, userID uuid.UUID) error {
+	execution, err := s.aiExecutionRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		s.logger.Errorw("failed to get ai execution", "error", err, "user_id", userID)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	execution.LeftQuota--
+	if execution.LeftQuota < 0 {
+		nextResetAt := time.Now().UTC().AddDate(0, 1, 0)
+
+		_, err = s.aiExecutionRepo.Update(ctx, &models.AIExecution{
+			UserID:      userID,
+			LeftQuota:   0,
+			NextResetAt: nextResetAt,
+		})
+
+		if err != nil {
+			s.logger.Errorw("failed to update ai execution", "error", err, "user_id", userID)
+			return apperrors.Internal(errInternalServerError)
+		}
+
+		return apperrors.Forbidden(errMsgAgentQuotaExceeded)
+	}
+
+	if _, err := s.aiExecutionRepo.Update(ctx, execution); err != nil {
+		s.logger.Errorw("failed to update ai execution", "error", err, "user_id", userID)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	return nil
 }
 
 func modelText(event *session.Event) string {

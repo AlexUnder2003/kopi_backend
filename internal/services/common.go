@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	errInternalServerError = "internal_server_error"
+	errInternalServerError            = "internal_server_error"
+	errMsgSubscriptionPlanProRequired = "subscription_plan_pro_required"
 )
 
 func NextDate(date time.Time, intervalType models.IntervalType, interval int) time.Time {

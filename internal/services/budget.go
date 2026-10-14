@@ -23,22 +23,40 @@ const (
 )
 
 type BudgetService struct {
-	db              *sql.DB
-	budgetRepo      *repositories.BudgetRepository
-	categoryService *CategoryService
-	logger          *zap.SugaredLogger
+	db                  *sql.DB
+	budgetRepo          *repositories.BudgetRepository
+	subscriptionService *SubscriptionService
+	categoryService     *CategoryService
+	logger              *zap.SugaredLogger
 }
 
 func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.SugaredLogger) *BudgetService {
 	return &BudgetService{
-		db:              db,
-		budgetRepo:      repositories.NewBudgetRepository(db),
-		categoryService: categoryService,
-		logger:          logger,
+		db:                  db,
+		budgetRepo:          repositories.NewBudgetRepository(db),
+		subscriptionService: NewSubscriptionService(db, logger),
+		categoryService:     categoryService,
+		logger:              logger,
 	}
 }
 
 func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dto.BudgetPost) (*dto.BudgetResponse, error) {
+	hasAccess, err := s.subscriptionService.HasAccess(ctx, userID, models.SubscriptionPlanPro)
+	if err != nil {
+		s.logger.Errorw("failed to check subscription plan", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	budgetsCount, err := s.budgetRepo.CountByUser(ctx, userID)
+	if err != nil {
+		s.logger.Errorw("failed to count budgets", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if budgetsCount >= 3 && !hasAccess {
+		return nil, apperrors.Forbidden(errMsgSubscriptionPlanProRequired)
+	}
+
 	if budget.IntervalType != models.IntervalTypeCustom {
 		budget.StartDate = s.CalculateStartDate()
 	}

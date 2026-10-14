@@ -23,7 +23,7 @@ func NewAccountsToolkit(accountsService *services.AccountService) *AccountsToolk
 }
 
 func (t *AccountsToolkit) ListAccounts(ctx context.Context, userID uuid.UUID, params repositories.ListParams, currency string) ([]agentdto.AccountItem, error) {
-	listed, err := t.accountsService.List(ctx, userID, params, &currency)
+	listed, err := t.accountsService.List(ctx, userID, params, currency)
 	if err != nil {
 		return nil, err
 	}

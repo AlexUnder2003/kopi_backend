@@ -99,6 +99,16 @@ func (r *BudgetRepository) List(ctx context.Context, userID uuid.UUID, params Li
 	return resp, nil
 }
 
+func (r *BudgetRepository) CountByUser(ctx context.Context, userID uuid.UUID) (int, error) {
+	const q = `SELECT COUNT(*) FROM budgets WHERE user_id = $1`
+
+	var count int
+	if err := r.db.QueryRowContext(ctx, q, userID).Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*dto.BudgetResponse, error) {
 	const q = `
 		WITH updated AS (

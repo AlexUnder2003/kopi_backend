@@ -28,6 +28,24 @@ func NewSubscriptionService(db *sql.DB, logger *zap.SugaredLogger) *Subscription
 	}
 }
 
+func (s *SubscriptionService) HasAccess(ctx context.Context, userID uuid.UUID, plan models.SubscriptionPlan) (bool, error) {
+	subscription, err := s.GetByUserID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+
+	switch plan {
+	case models.SubscriptionPlanFree:
+		return true, nil
+	case models.SubscriptionPlanPro:
+		return subscription.Plan == models.SubscriptionPlanPro || subscription.Plan == models.SubscriptionPlanProPlus, nil
+	case models.SubscriptionPlanProPlus:
+		return subscription.Plan == models.SubscriptionPlanProPlus, nil
+	}
+
+	return false, nil
+}
+
 func (s *SubscriptionService) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.Subscription, error) {
 	subscription, err := s.subscriptionRepo.GetByUserID(ctx, userID)
 	if err != nil {
