@@ -18,6 +18,7 @@ func NewAgent(ctx context.Context, cfg config.AgentConfig, tools []tool.Tool) (a
 		BaseURL: cfg.BaseURL,
 		API:     openaimodel.APIChatCompletions,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("create openai model: %w", err)
 	}
@@ -28,6 +29,7 @@ func NewAgent(ctx context.Context, cfg config.AgentConfig, tools []tool.Tool) (a
 		Model:       llm,
 		Tools:       tools,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("create llm agent: %w", err)
 	}

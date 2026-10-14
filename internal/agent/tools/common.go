@@ -9,7 +9,6 @@ import (
 	"KopiBackend/internal/dto"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	adkagent "google.golang.org/adk/v2/agent"
 )
 
@@ -80,12 +79,4 @@ func requiredCurrency(currency string) (string, error) {
 		return "", fmt.Errorf("unknown currency %q", currency)
 	}
 	return currency, nil
-}
-
-func positiveAmount(raw string) (decimal.Decimal, error) {
-	amount, err := decimal.NewFromString(strings.TrimSpace(raw))
-	if err != nil || !amount.IsPositive() {
-		return decimal.Decimal{}, errors.New("amount must be a positive decimal")
-	}
-	return amount, nil
 }

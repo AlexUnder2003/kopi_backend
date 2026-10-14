@@ -60,8 +60,10 @@ func (t *AccountsToolkit) Tools() ([]tool.Tool, error) {
 			Limit:  boundedLimit(args.Limit),
 		}, currency)
 	})
+
 	if err != nil {
 		return nil, err
 	}
+
 	return []tool.Tool{list}, nil
 }

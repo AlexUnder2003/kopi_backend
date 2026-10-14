@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"KopiBackend/internal/agent"
-	"KopiBackend/internal/apperrors"
 	"KopiBackend/internal/config"
 	"KopiBackend/internal/dto"
 
@@ -55,37 +54,56 @@ func NewAgentService(ctx context.Context, cfg config.AgentConfig, logger *zap.Su
 	}, nil
 }
 
-func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.AgentMessagePost) (*dto.AgentMessageResponse, error) {
-	sessionID := req.SessionID
-	if sessionID == "" {
-		sessionID = uuid.NewString()
-	}
+func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.AgentMessagePost) <-chan dto.AgentMessageResponse {
+	out := make(chan dto.AgentMessageResponse)
 
-	response := &dto.AgentMessageResponse{SessionID: sessionID}
+	go func() {
+		defer close(out)
 
-	for event, err := range s.runner.Run(ctx, userID.String(), sessionID, genai.NewContentFromText(req.Message, genai.RoleUser), adkagent.RunConfig{
-		StreamingMode: adkagent.StreamingModeNone,
-	}) {
-		if err != nil {
-			s.logger.Errorw("agent run failed", "error", err, "user_id", userID)
-			return nil, apperrors.Internal(errInternalServerError)
+		sessionID := req.SessionID
+		if sessionID == "" {
+			sessionID = uuid.NewString()
 		}
 
-		if event == nil || event.Partial || event.Content == nil || event.Content.Role != string(genai.RoleModel) {
-			continue
-		}
+		streamed := false
+		for event, err := range s.runner.Run(ctx, userID.String(), sessionID, genai.NewContentFromText(req.Message, genai.RoleUser), adkagent.RunConfig{
+			StreamingMode: adkagent.StreamingModeSSE,
+		}) {
+			if err != nil {
+				s.logger.Errorw("agent run failed", "error", err, "user_id", userID)
+				return
+			}
 
-		var text strings.Builder
-		for _, part := range event.Content.Parts {
-			if part == nil || part.Text == "" {
+			text := modelText(event)
+			if text == "" {
 				continue
 			}
+
+			if event.Partial {
+				streamed = true
+			} else if streamed {
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return
+			case out <- dto.AgentMessageResponse{SessionID: sessionID, Message: text}:
+			}
+		}
+	}()
+	return out
+}
+
+func modelText(event *session.Event) string {
+	if event == nil || event.Content == nil || event.Content.Role != string(genai.RoleModel) {
+		return ""
+	}
+	var text strings.Builder
+	for _, part := range event.Content.Parts {
+		if part != nil && part.Text != "" {
 			text.WriteString(part.Text)
 		}
-		if text.Len() > 0 {
-			response.Message = text.String()
-		}
 	}
-
-	return response, nil
+	return text.String()
 }

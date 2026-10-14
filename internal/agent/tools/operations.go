@@ -49,6 +49,14 @@ func (t *OperationsToolkit) CreateOperation(ctx context.Context, userID uuid.UUI
 	return t.operationsService.Create(ctx, userID, operation)
 }
 
+func (t *OperationsToolkit) UpdateOperation(ctx context.Context, userID uuid.UUID, operation *models.Operation) (any, error) {
+	return t.operationsService.Update(ctx, userID, operation)
+}
+
+func (t *OperationsToolkit) DeleteOperation(ctx context.Context, userID, id uuid.UUID) error {
+	return t.operationsService.Delete(ctx, id, userID)
+}
+
 func (t *OperationsToolkit) Tools() ([]tool.Tool, error) {
 	list, err := t.listTool()
 	if err != nil {
@@ -58,13 +66,21 @@ func (t *OperationsToolkit) Tools() ([]tool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []tool.Tool{list, create}, nil
+	update, err := t.updateTool()
+	if err != nil {
+		return nil, err
+	}
+	del, err := t.deleteTool()
+	if err != nil {
+		return nil, err
+	}
+	return []tool.Tool{list, create, update, del}, nil
 }
 
 func (t *OperationsToolkit) listTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
 		Name:        "list_operations",
-		Description: "Операции пользователя: доходы, расходы и переводы. Фильтры по имени, счёту, категории и датам необязательны.",
+		Description: "Операции пользователя: доходы, расходы и переводы. Id нужен для изменения и удаления. Фильтры по имени, счёту, категории и датам необязательны.",
 	}, func(ctx adkagent.Context, args agentdto.ListOperationsArgs) ([]agentdto.OperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
@@ -90,7 +106,7 @@ func (t *OperationsToolkit) createTool() (tool.Tool, error) {
 			return agentdto.OperationItem{}, errors.New("failed to create operation")
 		}
 
-		operation, err := newOperation(args)
+		operation, err := args.Model()
 		if err != nil {
 			return agentdto.OperationItem{}, errors.New("failed to create operation")
 		}
@@ -105,6 +121,56 @@ func (t *OperationsToolkit) createTool() (tool.Tool, error) {
 			return agentdto.OperationItem{}, errors.New("unexpected operation response")
 		}
 		return view, nil
+	})
+}
+
+func (t *OperationsToolkit) updateTool() (tool.Tool, error) {
+	return functiontool.New(functiontool.Config{
+		Name:        "update_operation",
+		Description: "Изменяет доход, расход или перевод. Передавай только поля, которые нужно поменять.",
+	}, func(ctx adkagent.Context, args agentdto.UpdateOperationArgs) (agentdto.OperationItem, error) {
+		userID, err := userIDFrom(ctx)
+		if err != nil {
+			return agentdto.OperationItem{}, errors.New("failed to update operation")
+		}
+
+		operation, err := args.Model()
+		if err != nil {
+			return agentdto.OperationItem{}, err
+		}
+
+		updated, err := t.UpdateOperation(ctx, userID, operation)
+		if err != nil {
+			return agentdto.OperationItem{}, errors.New("failed to update operation")
+		}
+
+		view, ok := operationView(updated)
+		if !ok {
+			return agentdto.OperationItem{}, errors.New("unexpected operation response")
+		}
+		return view, nil
+	})
+}
+
+func (t *OperationsToolkit) deleteTool() (tool.Tool, error) {
+	return functiontool.New(functiontool.Config{
+		Name:        "delete_operation",
+		Description: "Удаляет операцию и откатывает её влияние на баланс счёта.",
+	}, func(ctx adkagent.Context, args agentdto.DeleteOperationArgs) (agentdto.DeletedOperation, error) {
+		userID, err := userIDFrom(ctx)
+		if err != nil {
+			return agentdto.DeletedOperation{}, errors.New("failed to delete operation")
+		}
+
+		id, err := args.UUID()
+		if err != nil {
+			return agentdto.DeletedOperation{}, err
+		}
+
+		if err := t.DeleteOperation(ctx, userID, id); err != nil {
+			return agentdto.DeletedOperation{}, errors.New("failed to delete operation")
+		}
+		return agentdto.DeletedOperation{ID: id.String()}, nil
 	})
 }
 
@@ -138,64 +204,11 @@ func listParams(args agentdto.ListOperationsArgs) (repositories.OperationListPar
 	}, nil
 }
 
-func newOperation(args agentdto.CreateOperationArgs) (*models.Operation, error) {
-	name := strings.TrimSpace(args.Name)
-	if name == "" {
-		return nil, errors.New("name is required")
-	}
-
-	amount, err := positiveAmount(args.Amount)
-	if err != nil {
-		return nil, err
-	}
-
-	opType := models.OperationType(strings.ToLower(strings.TrimSpace(args.Type)))
-	switch opType {
-	case models.OperationTypeIncome, models.OperationTypeExpense, models.OperationTypeTransfer:
-	default:
-		return nil, errors.New("type must be income, expense, or transfer")
-	}
-
-	accountID, err := requiredUUID(args.AccountID, "account_id")
-	if err != nil {
-		return nil, err
-	}
-	categoryID, err := requiredUUID(args.CategoryID, "category_id")
-	if err != nil {
-		return nil, err
-	}
-
-	var fromAccountID uuid.UUID
-	if opType == models.OperationTypeTransfer {
-		fromAccountID, err = requiredUUID(args.FromAccountID, "from_account_id")
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	occurred, err := parseOptionalTime(args.OccurrenceDate)
-	if err != nil {
-		return nil, fmt.Errorf("occurrence_date: %w", err)
-	}
-	if occurred.IsZero() {
-		occurred = time.Now().UTC()
-	}
-
-	return &models.Operation{
-		Name:           name,
-		Amount:         amount,
-		Type:           opType,
-		AccountID:      accountID,
-		FromAccountID:  fromAccountID,
-		CategoryID:     categoryID,
-		OccurrenceDate: occurred,
-	}, nil
-}
-
 func operationView(item any) (agentdto.OperationItem, bool) {
 	switch op := item.(type) {
 	case dto.OperationResponse:
 		return agentdto.OperationItem{
+			ID:             op.ID.String(),
 			Name:           op.Name,
 			Amount:         op.Amount.String(),
 			Type:           string(op.Type),

@@ -8,7 +8,6 @@ import (
 
 	agentdto "KopiBackend/internal/agent/dto"
 	"KopiBackend/internal/dto"
-	"KopiBackend/internal/models"
 	"KopiBackend/internal/repositories"
 	"KopiBackend/internal/services"
 
@@ -48,6 +47,14 @@ func (t *PlannedOperationsToolkit) CreatePlannedOperation(ctx context.Context, u
 	return created, nil
 }
 
+func (t *PlannedOperationsToolkit) UpdatePlannedOperation(ctx context.Context, id, userID uuid.UUID, op *dto.PlannedOperationUpdate) (*dto.PlannedOperationResponse, error) {
+	return t.plannedOperationsService.Update(ctx, id, userID, op)
+}
+
+func (t *PlannedOperationsToolkit) DeletePlannedOperation(ctx context.Context, id, userID uuid.UUID) error {
+	return t.plannedOperationsService.Delete(ctx, id, userID)
+}
+
 func (t *PlannedOperationsToolkit) Tools() ([]tool.Tool, error) {
 	list, err := t.listTool()
 	if err != nil {
@@ -57,13 +64,21 @@ func (t *PlannedOperationsToolkit) Tools() ([]tool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []tool.Tool{list, create}, nil
+	update, err := t.updateTool()
+	if err != nil {
+		return nil, err
+	}
+	del, err := t.deleteTool()
+	if err != nil {
+		return nil, err
+	}
+	return []tool.Tool{list, create, update, del}, nil
 }
 
 func (t *PlannedOperationsToolkit) listTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
 		Name:        "list_planned_operations",
-		Description: "Запланированные доходы и расходы. Даты ограничивают окно следующего запуска.",
+		Description: "Запланированные доходы и расходы. Id нужен для изменения и удаления. Даты ограничивают окно следующего запуска.",
 	}, func(ctx adkagent.Context, args agentdto.ListPlannedOperationsArgs) ([]agentdto.PlannedOperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
@@ -95,7 +110,7 @@ func (t *PlannedOperationsToolkit) createTool() (tool.Tool, error) {
 			return agentdto.PlannedOperationItem{}, err
 		}
 
-		op, err := newPlannedOperation(args)
+		op, err := args.Model()
 		if err != nil {
 			return agentdto.PlannedOperationItem{}, err
 		}
@@ -108,57 +123,49 @@ func (t *PlannedOperationsToolkit) createTool() (tool.Tool, error) {
 	})
 }
 
-func newPlannedOperation(args agentdto.CreatePlannedOperationArgs) (*dto.PlannedOperationPost, error) {
-	name := strings.TrimSpace(args.Name)
-	if name == "" {
-		return nil, errors.New("name is required")
-	}
+func (t *PlannedOperationsToolkit) updateTool() (tool.Tool, error) {
+	return functiontool.New(functiontool.Config{
+		Name:        "update_planned_operation",
+		Description: "Изменяет запланированный доход или расход. Передавай только поля, которые нужно поменять.",
+	}, func(ctx adkagent.Context, args agentdto.UpdatePlannedOperationArgs) (agentdto.PlannedOperationItem, error) {
+		userID, err := userIDFrom(ctx)
+		if err != nil {
+			return agentdto.PlannedOperationItem{}, err
+		}
 
-	amount, err := positiveAmount(args.Amount)
-	if err != nil {
-		return nil, err
-	}
+		id, op, err := args.Model()
+		if err != nil {
+			return agentdto.PlannedOperationItem{}, err
+		}
 
-	opType := models.OperationType(strings.ToLower(strings.TrimSpace(args.Type)))
-	if opType != models.OperationTypeIncome && opType != models.OperationTypeExpense {
-		return nil, errors.New("type must be income or expense")
-	}
+		updated, err := t.UpdatePlannedOperation(ctx, id, userID, op)
+		if err != nil {
+			return agentdto.PlannedOperationItem{}, err
+		}
+		return plannedOperationView(*updated), nil
+	})
+}
 
-	intervalType := models.IntervalType(strings.ToLower(strings.TrimSpace(args.IntervalType)))
-	switch intervalType {
-	case models.IntervalTypeDaily, models.IntervalTypeWeekly, models.IntervalTypeBiweekly, models.IntervalTypeMonthly, models.IntervalTypeCustom:
-	default:
-		return nil, errors.New("interval_type must be daily, weekly, biweekly, monthly, or custom")
-	}
-	if intervalType == models.IntervalTypeCustom && args.Interval < 1 {
-		return nil, errors.New("interval must be at least 1 day when interval_type is custom")
-	}
+func (t *PlannedOperationsToolkit) deleteTool() (tool.Tool, error) {
+	return functiontool.New(functiontool.Config{
+		Name:        "delete_planned_operation",
+		Description: "Удаляет запланированный доход или расход. Уже созданные операции не затрагиваются.",
+	}, func(ctx adkagent.Context, args agentdto.DeletePlannedOperationArgs) (agentdto.DeletedPlannedOperation, error) {
+		userID, err := userIDFrom(ctx)
+		if err != nil {
+			return agentdto.DeletedPlannedOperation{}, err
+		}
 
-	accountID, err := requiredUUID(args.AccountID, "account_id")
-	if err != nil {
-		return nil, err
-	}
-	categoryID, err := requiredUUID(args.CategoryID, "category_id")
-	if err != nil {
-		return nil, err
-	}
+		id, err := args.UUID()
+		if err != nil {
+			return agentdto.DeletedPlannedOperation{}, err
+		}
 
-	plannedAt, err := parseOptionalTime(args.PlannedDate)
-	if err != nil || plannedAt.IsZero() {
-		return nil, errors.New("planned_date is required, use RFC3339 or YYYY-MM-DD")
-	}
-
-	return &dto.PlannedOperationPost{
-		Name:         name,
-		AccountID:    accountID,
-		Amount:       amount,
-		Type:         opType,
-		IntervalType: intervalType,
-		Interval:     args.Interval,
-		CategoryID:   categoryID,
-		PlannedAt:    plannedAt,
-		IsRecurring:  args.IsRecurring,
-	}, nil
+		if err := t.DeletePlannedOperation(ctx, id, userID); err != nil {
+			return agentdto.DeletedPlannedOperation{}, err
+		}
+		return agentdto.DeletedPlannedOperation{ID: id.String()}, nil
+	})
 }
 
 func plannedOperationView(op dto.PlannedOperationResponse) agentdto.PlannedOperationItem {

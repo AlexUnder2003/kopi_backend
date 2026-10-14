@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"KopiBackend/internal/dto"
@@ -41,12 +43,27 @@ func (h *AgentHandler) Send(c *echo.Context) error {
 		return mapAgentValidationErrors(err)
 	}
 
-	resp, err := h.agentService.Send(c.Request().Context(), userID, &req)
-	if err != nil {
-		return mapAppError(err)
+	w := c.Response()
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+
+	for msg := range h.agentService.Send(c.Request().Context(), userID, &req) {
+		payload, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+			return err
+		}
+
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			return err
+		}
 	}
 
-	return c.JSON(http.StatusOK, resp)
+	return nil
 }
 
 func mapAgentValidationErrors(err error) error {
