@@ -150,7 +150,7 @@ func (s *DashboardService) loadDashboardData(
 	})
 
 	group.Go(func() error {
-		result, err := s.accountService.List(groupCtx, userID, repositories.ListParams{}, &currency)
+		result, err := s.accountService.List(groupCtx, userID, repositories.ListParams{}, currency)
 		if err == nil {
 			data.accounts = *result
 		}

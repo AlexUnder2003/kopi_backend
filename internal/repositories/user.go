@@ -19,14 +19,14 @@ func NewUserRepository(db *sql.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) Create(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
+func (r *UserRepository) Create(ctx context.Context, user *models.User, tx *sql.Tx) (*dto.UserResponse, error) {
 	const q = `
 		INSERT INTO users (name, email)
 		VALUES ($1, $2)
 		RETURNING id, name, email`
 
 	var resp dto.UserResponse
-	if err := sqlscan.Get(ctx, r.db, &resp, q, user.Name, user.Email); err != nil {
+	if err := sqlscan.Get(ctx, DBorTx(r.db, tx), &resp, q, user.Name, user.Email); err != nil {
 		return nil, err
 	}
 	return &resp, nil

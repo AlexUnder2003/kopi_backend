@@ -39,7 +39,7 @@ func (r *SubscriptionRepository) GetByUserID(ctx context.Context, userID uuid.UU
 	return &resp, nil
 }
 
-func (r *SubscriptionRepository) Create(ctx context.Context, subscription *models.Subscription) (*dto.SubscriptionResponse, error) {
+func (r *SubscriptionRepository) Create(ctx context.Context, subscription *models.Subscription, tx *sql.Tx) (*dto.SubscriptionResponse, error) {
 	const q = `
 		INSERT INTO subscription AS s (user_id, plan, start_date, end_date)
 		VALUES ($1, $2, $3, $4)
@@ -47,7 +47,7 @@ func (r *SubscriptionRepository) Create(ctx context.Context, subscription *model
 
 	var resp dto.SubscriptionResponse
 	if err := sqlscan.Get(
-		ctx, r.db, &resp, q,
+		ctx, DBorTx(r.db, tx), &resp, q,
 		subscription.UserID, subscription.Plan, subscription.StartDate, subscription.EndDate,
 	); err != nil {
 		return nil, err

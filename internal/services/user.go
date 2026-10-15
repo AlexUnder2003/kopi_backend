@@ -33,12 +33,14 @@ const (
 )
 
 type UserService struct {
-	userRepo      *repositories.UserRepository
-	userOTPRepo   *repositories.UserOTPRepository
-	userTokenRepo *repositories.UserTokenRepository
-	appConfig     *config.AppConfig
-	logger        *zap.SugaredLogger
-	smtpService   *SMTPService
+	db                  *sql.DB
+	userRepo            *repositories.UserRepository
+	userOTPRepo         *repositories.UserOTPRepository
+	userTokenRepo       *repositories.UserTokenRepository
+	subscriptionRepo    *repositories.SubscriptionRepository
+	appConfig           *config.AppConfig
+	logger              *zap.SugaredLogger
+	smtpService         *SMTPService
 }
 
 func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.SugaredLogger) *UserService {
@@ -47,12 +49,14 @@ func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.Sugared
 	userTokenRepo := repositories.NewUserTokenRepository(db)
 	smtpService := NewSMTPService(appConfig, logger)
 	return &UserService{
-		userRepo:      userRepo,
-		userOTPRepo:   userOTPRepo,
-		userTokenRepo: userTokenRepo,
-		appConfig:     appConfig,
-		logger:        logger,
-		smtpService:   smtpService,
+		db:                  db,
+		userRepo:            userRepo,
+		userOTPRepo:         userOTPRepo,
+		userTokenRepo:       userTokenRepo,
+		subscriptionRepo:    repositories.NewSubscriptionRepository(db),
+		appConfig:           appConfig,
+		logger:              logger,
+		smtpService:         smtpService,
 	}
 }
 
@@ -108,10 +112,9 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 			return apperrors.Internal(errInternalServerError)
 		}
 
-		user, err = s.userRepo.Create(ctx, &models.User{Email: email})
+		user, err = s.createWithSubscription(ctx, &models.User{Email: email})
 		if err != nil {
-			s.logger.Errorw("failed to create user", "error", err)
-			return apperrors.Internal(errInternalServerError)
+			return err
 		}
 	}
 
@@ -225,11 +228,38 @@ func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *UserService) Create(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
-	created, err := s.userRepo.Create(ctx, user)
+	return s.createWithSubscription(ctx, user)
+}
+
+func (s *UserService) createWithSubscription(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	created, err := s.userRepo.Create(ctx, user, tx)
 	if err != nil {
 		s.logger.Errorw("failed to create user", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
+
+	if _, err := s.subscriptionRepo.Create(ctx, &models.Subscription{
+		UserID:    created.ID,
+		Plan:      models.SubscriptionPlanFree,
+		StartDate: time.Now(),
+		EndDate:   time.Now().Add(time.Hour * 12 * 30),
+	}, tx); err != nil {
+		s.logger.Errorw("failed to create subscription", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
 	return created, nil
 }
 

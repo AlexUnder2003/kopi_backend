@@ -59,7 +59,7 @@ func (s *SubscriptionService) GetByUserID(ctx context.Context, userID uuid.UUID)
 }
 
 func (s *SubscriptionService) Create(ctx context.Context, subscription *models.Subscription) (*dto.SubscriptionResponse, error) {
-	created, err := s.subscriptionRepo.Create(ctx, subscription)
+	created, err := s.subscriptionRepo.Create(ctx, subscription, nil)
 	if err != nil {
 		s.logger.Errorw("failed to create subscription", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)

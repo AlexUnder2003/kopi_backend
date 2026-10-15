@@ -23,7 +23,7 @@ type SendOTPRequest struct {
 
 func (r *SendOTPRequest) Validate() error {
 	if r.Email == "" {
-		return errors.New("email is required")
+		return errors.New("email")
 	}
 	return nil
 }
@@ -34,7 +34,7 @@ type LoginRequest struct {
 
 func (r *LoginRequest) Validate() error {
 	if r.OTP == "" {
-		return errors.New("otp is required")
+		return errors.New("otp")
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ type RefreshTokenRequest struct {
 
 func (r *RefreshTokenRequest) Validate() error {
 	if r.RefreshToken == "" {
-		return errors.New("refresh_token is required")
+		return errors.New("refresh_token")
 	}
 	return nil
 }

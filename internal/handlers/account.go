@@ -150,11 +150,16 @@ func (h *AccountHandler) Delete(c *echo.Context) error {
 }
 
 func mapAccountValidationErrors(err error) error {
-	if err.Error() == "name" {
+	switch err.Error() {
+	case "name":
 		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_name")
+	case "icon":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_icon")
+	case "currency":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_currency")
+	case "balance":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_account_balance")
+	default:
+		return err
 	}
-	if err.Error() == "currency" {
-		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_currency")
-	}
-	return err
 }

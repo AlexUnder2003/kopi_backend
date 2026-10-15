@@ -37,7 +37,7 @@ func (h *UserHandler) SendOTP(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return mapUserValidationErrors(err)
 	}
 
 	if err := h.userService.SendOTP(c.Request().Context(), req.Email); err != nil {
@@ -53,7 +53,7 @@ func (h *UserHandler) Login(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return mapUserValidationErrors(err)
 	}
 
 	resp, err := h.userService.Login(c.Request().Context(), req.OTP)
@@ -70,7 +70,7 @@ func (h *UserHandler) Logout(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return mapUserValidationErrors(err)
 	}
 
 	if err := h.userService.Logout(c.Request().Context(), req.RefreshToken); err != nil {
@@ -100,7 +100,7 @@ func (h *UserHandler) RefreshToken(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, invalidRequestBody)
 	}
 	if err := req.Validate(); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return mapUserValidationErrors(err)
 	}
 
 	resp, err := h.userService.Refresh(c.Request().Context(), req.RefreshToken)
@@ -109,4 +109,17 @@ func (h *UserHandler) RefreshToken(c *echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, resp)
+}
+
+func mapUserValidationErrors(err error) error {
+	switch err.Error() {
+	case "email":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_email")
+	case "otp":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_otp")
+	case "refresh_token":
+		return echo.NewHTTPError(http.StatusBadRequest, "bad_request_refresh_token")
+	default:
+		return err
+	}
 }

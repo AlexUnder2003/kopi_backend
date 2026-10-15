@@ -176,7 +176,7 @@ func operationListParams(c *echo.Context) (repositories.OperationListParams, err
 	}
 
 	if value := c.QueryParam("start_date"); value != "" {
-		parsed, err := parseOperationDate(value)
+		parsed, err := time.Parse(time.RFC3339, value)
 		if err != nil {
 			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_date")
 		}
@@ -184,7 +184,7 @@ func operationListParams(c *echo.Context) (repositories.OperationListParams, err
 	}
 
 	if value := c.QueryParam("end_date"); value != "" {
-		parsed, err := parseOperationDate(value)
+		parsed, err := time.Parse(time.RFC3339, value)
 		if err != nil {
 			return params, echo.NewHTTPError(http.StatusBadRequest, "bad_request_operation_date")
 		}
@@ -198,13 +198,6 @@ func operationListParams(c *echo.Context) (repositories.OperationListParams, err
 	params.ListParams = list
 
 	return params, nil
-}
-
-func parseOperationDate(value string) (time.Time, error) {
-	if parsed, err := time.Parse(time.DateOnly, value); err == nil {
-		return parsed, nil
-	}
-	return time.Parse(time.RFC3339, value)
 }
 
 func mapOperationValidationErrors(err error) error {
