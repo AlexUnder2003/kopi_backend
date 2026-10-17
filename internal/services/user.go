@@ -33,14 +33,14 @@ const (
 )
 
 type UserService struct {
-	db                  *sql.DB
-	userRepo            *repositories.UserRepository
-	userOTPRepo         *repositories.UserOTPRepository
-	userTokenRepo       *repositories.UserTokenRepository
-	subscriptionRepo    *repositories.SubscriptionRepository
-	appConfig           *config.AppConfig
-	logger              *zap.SugaredLogger
-	smtpService         *SMTPService
+	db               *sql.DB
+	userRepo         *repositories.UserRepository
+	userOTPRepo      *repositories.UserOTPRepository
+	userTokenRepo    *repositories.UserTokenRepository
+	subscriptionRepo *repositories.SubscriptionRepository
+	appConfig        *config.AppConfig
+	logger           *zap.SugaredLogger
+	smtpService      *SMTPService
 }
 
 func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.SugaredLogger) *UserService {
@@ -49,14 +49,14 @@ func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.Sugared
 	userTokenRepo := repositories.NewUserTokenRepository(db)
 	smtpService := NewSMTPService(appConfig, logger)
 	return &UserService{
-		db:                  db,
-		userRepo:            userRepo,
-		userOTPRepo:         userOTPRepo,
-		userTokenRepo:       userTokenRepo,
-		subscriptionRepo:    repositories.NewSubscriptionRepository(db),
-		appConfig:           appConfig,
-		logger:              logger,
-		smtpService:         smtpService,
+		db:               db,
+		userRepo:         userRepo,
+		userOTPRepo:      userOTPRepo,
+		userTokenRepo:    userTokenRepo,
+		subscriptionRepo: repositories.NewSubscriptionRepository(db),
+		appConfig:        appConfig,
+		logger:           logger,
+		smtpService:      smtpService,
 	}
 }
 
@@ -163,6 +163,7 @@ func (s *UserService) Login(ctx context.Context, otp string) (*dto.LoginResponse
 	}
 
 	refreshTokenHash := sha256.Sum256([]byte(refreshToken))
+
 	if err = s.userTokenRepo.Create(ctx, &models.UserToken{
 		UserID:    userOTP.UserID,
 		TokenHash: hex.EncodeToString(refreshTokenHash[:]),
@@ -228,10 +229,6 @@ func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
 }
 
 func (s *UserService) Create(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
-	return s.createWithSubscription(ctx, user)
-}
-
-func (s *UserService) createWithSubscription(ctx context.Context, user *models.User) (*dto.UserResponse, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Errorw("failed to begin transaction", "error", err)
