@@ -1,7 +1,9 @@
 package dto
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"KopiBackend/internal/models"
@@ -15,9 +17,10 @@ type BudgetPost struct {
 	Amount       decimal.Decimal     `json:"amount"`
 	IntervalType models.IntervalType `json:"interval_type"`
 	Interval     int                 `json:"interval,omitempty"`
-	CategoryID   uuid.UUID           `json:"category_id"`
+	CategoryIDs  []uuid.UUID         `json:"category_ids"`
 	Currency     string              `json:"currency"`
 	StartDate    time.Time           `json:"start_date,omitempty"`
+	AlreadySpent decimal.Decimal     `json:"already_spent,omitempty"`
 }
 
 func (r *BudgetPost) Validate() error {
@@ -33,8 +36,13 @@ func (r *BudgetPost) Validate() error {
 	if r.IntervalType == models.IntervalTypeCustom && r.Interval < 1 {
 		return errors.New("interval")
 	}
-	if r.CategoryID == uuid.Nil {
+	if len(r.CategoryIDs) == 0 {
 		return errors.New("category_id")
+	}
+	for _, categoryID := range r.CategoryIDs {
+		if categoryID == uuid.Nil {
+			return errors.New("category_id")
+		}
 	}
 	if !ValidCurrency(r.Currency) {
 		return errors.New("currency")
@@ -74,6 +82,11 @@ type BudgetBalanceUpdate struct {
 	Delta      decimal.Decimal
 }
 
+type BudgetResponseList struct {
+	Budgets    []BudgetResponse `json:"budgets"`
+	TotalCount int              `json:"total_count"`
+}
+
 type BudgetResponse struct {
 	ID           uuid.UUID           `json:"id" db:"id"`
 	Name         string              `json:"name" db:"name"`
@@ -85,5 +98,31 @@ type BudgetResponse struct {
 	StartDate    time.Time           `json:"start_date" db:"start_date"`
 	ResetDate    time.Time           `json:"reset_date" db:"reset_date"`
 	IsActive     bool                `json:"is_active" db:"is_active"`
-	Category     CategoryResponse    `json:"category" db:"category"`
+	Categories   Categories          `json:"categories" db:"categories"`
+}
+
+type Categories []CategoryResponse
+
+func (c *Categories) Scan(src any) error {
+	if src == nil {
+		*c = Categories{}
+		return nil
+	}
+
+	var raw []byte
+	switch value := src.(type) {
+	case []byte:
+		raw = value
+	case string:
+		raw = []byte(value)
+	default:
+		return fmt.Errorf("scan categories: %T", src)
+	}
+
+	if len(raw) == 0 || string(raw) == "null" {
+		*c = Categories{}
+		return nil
+	}
+
+	return json.Unmarshal(raw, c)
 }

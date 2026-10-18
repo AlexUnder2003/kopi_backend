@@ -27,6 +27,7 @@ func (h *PlannedOperationHandler) Register(g *echo.Group) {
 
 	plannedOperations.POST("", h.Create)
 	plannedOperations.GET("", h.List)
+	plannedOperations.GET("/nearest", h.GetNearestExpense)
 	plannedOperations.GET("/:id", h.GetByID)
 	plannedOperations.PATCH("/:id", h.Update)
 	plannedOperations.DELETE("/:id", h.Delete)
@@ -66,6 +67,25 @@ func (h *PlannedOperationHandler) List(c *echo.Context) error {
 	}
 
 	resp, err := h.plannedOperationService.List(c.Request().Context(), userID, time.Time{}, time.Time{}, params)
+	if err != nil {
+		return mapAppError(err)
+	}
+
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *PlannedOperationHandler) GetNearestExpense(c *echo.Context) error {
+	userID, err := utils.GetUserIDFromContext(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, unauthorized)
+	}
+
+	params, err := listParams(c)
+	if err != nil {
+		return err
+	}
+
+	resp, err := h.plannedOperationService.GetNearestExpense(c.Request().Context(), userID, params)
 	if err != nil {
 		return mapAppError(err)
 	}

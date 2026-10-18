@@ -35,8 +35,8 @@ func (t *OperationsToolkit) ListOperations(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 
-	items := make([]agentdto.OperationItem, 0, len(listed))
-	for _, item := range listed {
+	items := make([]agentdto.OperationItem, 0, len(listed.Operations))
+	for _, item := range listed.Operations {
 		view, ok := operationView(item)
 		if ok {
 			items = append(items, view)

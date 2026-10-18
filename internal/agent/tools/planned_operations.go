@@ -31,8 +31,8 @@ func (t *PlannedOperationsToolkit) ListPlannedOperations(ctx context.Context, us
 		return nil, err
 	}
 
-	items := make([]agentdto.PlannedOperationItem, 0, len(listed))
-	for _, op := range listed {
+	items := make([]agentdto.PlannedOperationItem, 0, len(listed.PlannedOperations))
+	for _, op := range listed.PlannedOperations {
 		items = append(items, plannedOperationView(op))
 	}
 	return items, nil
@@ -170,18 +170,20 @@ func (t *PlannedOperationsToolkit) deleteTool() (tool.Tool, error) {
 
 func plannedOperationView(op dto.PlannedOperationResponse) agentdto.PlannedOperationItem {
 	item := agentdto.PlannedOperationItem{
-		ID:           op.ID.String(),
-		Name:         op.Name,
-		Amount:       op.Amount.String(),
-		Type:         string(op.Type),
-		AccountID:    op.Account.ID.String(),
-		Account:      op.Account.Name,
-		Currency:     op.Account.Currency,
-		CategoryID:   op.Category.ID.String(),
-		Category:     op.Category.Name,
-		IntervalType: string(op.IntervalType),
-		PlannedDate:  op.PlannedAt.UTC().Format(time.RFC3339),
-		IsRecurring:  op.IsRecurring,
+		ID:          op.ID.String(),
+		Name:        op.Name,
+		Amount:      op.Amount.String(),
+		Type:        string(op.Type),
+		AccountID:   op.Account.ID.String(),
+		Account:     op.Account.Name,
+		Currency:    op.Account.Currency,
+		CategoryID:  op.Category.ID.String(),
+		Category:    op.Category.Name,
+		PlannedDate: op.PlannedAt.UTC().Format(time.RFC3339),
+		IsRecurring: op.IsRecurring,
+	}
+	if op.IntervalType != nil {
+		item.IntervalType = string(*op.IntervalType)
 	}
 	if op.NextRunAt != nil {
 		item.NextRunDate = op.NextRunAt.UTC().Format(time.RFC3339)

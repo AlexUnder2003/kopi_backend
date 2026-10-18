@@ -59,6 +59,11 @@ type OperationUpdate struct {
 	OccurrenceDate time.Time            `json:"occurrence_date,omitempty"`
 }
 
+type OperationResponseList struct {
+	Operations []any `json:"operations"`
+	TotalCount int   `json:"total_count"`
+}
+
 type OperationResponse struct {
 	ID             uuid.UUID            `json:"id" db:"id"`
 	Name           string               `json:"name" db:"name"`

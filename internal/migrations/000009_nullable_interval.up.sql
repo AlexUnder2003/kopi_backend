@@ -1,0 +1,1 @@
+ALTER TABLE planned_operations ALTER COLUMN interval_type DROP NOT NULL;

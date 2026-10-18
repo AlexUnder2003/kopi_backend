@@ -28,7 +28,8 @@ const operationSelectColumns = `
 	COALESCE(fa.icon, '') AS "from_account.icon",
 	c.id AS "category.id",
 	c.name AS "category.name",
-	c.icon AS "category.icon"`
+	c.icon AS "category.icon",
+	CASE WHEN c.user_id IS NULL THEN TRUE ELSE FALSE END AS "category.is_system"`
 
 const operationJoins = `
 	JOIN accounts a ON a.id = t.account_id
@@ -42,7 +43,6 @@ type OperationListParams struct {
 	StartDate  time.Time
 	EndDate    time.Time
 }
-
 type OperationRepository struct {
 	db *sql.DB
 }
@@ -86,9 +86,15 @@ func (r *OperationRepository) GetByID(ctx context.Context, id, userID uuid.UUID)
 	return &resp, nil
 }
 
-func (r *OperationRepository) List(ctx context.Context, params OperationListParams, userID uuid.UUID) ([]dto.OperationResponseTransfer, error) {
+type operationListRow struct {
+	dto.OperationResponseTransfer
+	TotalCount int `db:"total_count"`
+}
+
+func (r *OperationRepository) List(ctx context.Context, params OperationListParams, userID uuid.UUID) ([]dto.OperationResponseTransfer, int, error) {
 	const q = `
-		SELECT ` + operationSelectColumns + `
+		SELECT ` + operationSelectColumns + `,
+			COUNT(*) OVER() AS total_count
 		FROM operations t
 		` + operationJoins + `
 			WHERE a.user_id = $1
@@ -100,9 +106,9 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 			ORDER BY t.occurrence_date DESC
 			LIMIT $7 OFFSET $8`
 
-	var resp []dto.OperationResponseTransfer
+	var rows []operationListRow
 	if err := sqlscan.Select(
-		ctx, r.db, &resp, q,
+		ctx, r.db, &rows, q,
 		userID,
 		nullUUID(params.AccountID),
 		nullUUID(params.CategoryID),
@@ -112,9 +118,17 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 		nullInt(params.Limit),
 		nullInt(params.Offset),
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return resp, nil
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+
+	resp := make([]dto.OperationResponseTransfer, len(rows))
+	for i, row := range rows {
+		resp[i] = row.OperationResponseTransfer
+	}
+	return resp, rows[0].TotalCount, nil
 }
 
 func (r *OperationRepository) Update(ctx context.Context, op *models.Operation, tx *sql.Tx) (*dto.OperationResponseTransfer, error) {

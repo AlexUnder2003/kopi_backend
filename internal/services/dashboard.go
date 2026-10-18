@@ -144,7 +144,7 @@ func (s *DashboardService) loadDashboardData(
 			repositories.ListParams{},
 		)
 		if err == nil {
-			data.plannedOperations = result
+			data.plannedOperations = result.PlannedOperations
 		}
 		return err
 	})
@@ -163,7 +163,7 @@ func (s *DashboardService) loadDashboardData(
 			EndDate:   period.end,
 		})
 		if err == nil {
-			data.operations = operationResponses(result)
+			data.operations = operationResponses(result.Operations)
 		}
 		return err
 	})
@@ -171,7 +171,7 @@ func (s *DashboardService) loadDashboardData(
 	group.Go(func() error {
 		result, err := s.budgetService.List(groupCtx, userID, repositories.ListParams{})
 		if err == nil {
-			data.budgets = result
+			data.budgets = result.Budgets
 		}
 		return err
 	})

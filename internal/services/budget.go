@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	errMsgBudgetNotFound      = "not_found_budget"
-	errMsgBudgetAlreadyExists = "already_exists_budget"
+	errMsgBudgetNotFound                = "not_found_budget"
+	errMsgBudgetAlreadyExists           = "already_exists_budget"
+	errMsgAlreadySpentGreaterThanAmount = "already_spent_error"
 )
 
 type BudgetService struct {
@@ -38,6 +39,15 @@ func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.
 		categoryService:     categoryService,
 		logger:              logger,
 	}
+}
+
+func (s *BudgetService) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID) (decimal.Decimal, error) {
+	alreadySpent, err := s.budgetRepo.GetAlreadySpent(ctx, userID, categoryIDs)
+	if err != nil {
+		s.logger.Errorw("failed to get already spent", "error", err)
+		return decimal.Zero, apperrors.Internal(errInternalServerError)
+	}
+	return alreadySpent, nil
 }
 
 func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dto.BudgetPost) (*dto.BudgetResponse, error) {
@@ -61,16 +71,27 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		budget.StartDate = s.CalculateStartDate()
 	}
 
+	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs)
+	if err != nil {
+		s.logger.Errorw("failed to get already spent", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if budget.AlreadySpent.LessThan(alreadySpent) {
+		budget.AlreadySpent = alreadySpent
+	}
+
 	budgetModel := &models.Budget{
 		Name:         budget.Name,
 		UserID:       userID,
 		Amount:       budget.Amount,
+		Balance:      budget.Amount.Sub(budget.AlreadySpent),
 		IntervalType: budget.IntervalType,
 		Interval:     budget.Interval,
 		StartDate:    budget.StartDate,
 		ResetDate:    NextDate(budget.StartDate, budget.IntervalType, budget.Interval),
 		Currency:     models.CurrencyCode(budget.Currency),
-		CategoryID:   budget.CategoryID,
+		CategoryIDs:  budget.CategoryIDs,
 	}
 
 	created, err := s.budgetRepo.Create(ctx, budgetModel)
@@ -99,14 +120,21 @@ func (s *BudgetService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto
 	return budget, nil
 }
 
-func (s *BudgetService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) ([]dto.BudgetResponse, error) {
-	budgets, err := s.budgetRepo.List(ctx, userID, params)
+func (s *BudgetService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) (*dto.BudgetResponseList, error) {
+	budgets, total, err := s.budgetRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list budgets", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	return budgets, nil
+	if budgets == nil {
+		budgets = []dto.BudgetResponse{}
+	}
+
+	return &dto.BudgetResponseList{
+		Budgets:    budgets,
+		TotalCount: total,
+	}, nil
 }
 
 func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget *dto.BudgetUpdate) (*dto.BudgetResponse, error) {

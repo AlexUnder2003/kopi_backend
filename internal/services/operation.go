@@ -108,8 +108,8 @@ func (s *OperationService) GetByID(ctx context.Context, id, userID uuid.UUID) (a
 	return operation.Response(), nil
 }
 
-func (s *OperationService) List(ctx context.Context, userID uuid.UUID, params repositories.OperationListParams) ([]any, error) {
-	operations, err := s.operationRepo.List(ctx, params, userID)
+func (s *OperationService) List(ctx context.Context, userID uuid.UUID, params repositories.OperationListParams) (*dto.OperationResponseList, error) {
+	operations, total, err := s.operationRepo.List(ctx, params, userID)
 	if err != nil {
 		s.logger.Errorw("failed to list operations", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
@@ -119,7 +119,10 @@ func (s *OperationService) List(ctx context.Context, userID uuid.UUID, params re
 	for i, operation := range operations {
 		response[i] = operation.Response()
 	}
-	return response, nil
+	return &dto.OperationResponseList{
+		Operations: response,
+		TotalCount: total,
+	}, nil
 }
 
 func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operation *models.Operation) (any, error) {

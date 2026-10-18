@@ -81,8 +81,8 @@ func (s *PlannedOperationService) GetByID(ctx context.Context, id, userID uuid.U
 	return op, nil
 }
 
-func (s *PlannedOperationService) List(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time, params repositories.ListParams) ([]dto.PlannedOperationResponse, error) {
-	ops, err := s.plannedOperationRepo.List(ctx, repositories.PlannedOperationListParams{
+func (s *PlannedOperationService) List(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time, params repositories.ListParams) (*dto.PlannedOperationResponseList, error) {
+	ops, total, err := s.plannedOperationRepo.List(ctx, repositories.PlannedOperationListParams{
 		ListParams: params,
 		UserID:     userID,
 		StartDate:  startDate,
@@ -93,7 +93,14 @@ func (s *PlannedOperationService) List(ctx context.Context, userID uuid.UUID, st
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	return ops, nil
+	if ops == nil {
+		ops = []dto.PlannedOperationResponse{}
+	}
+
+	return &dto.PlannedOperationResponseList{
+		PlannedOperations: ops,
+		TotalCount:        total,
+	}, nil
 }
 
 func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UUID, op *dto.PlannedOperationUpdate) (*dto.PlannedOperationResponse, error) {
@@ -129,7 +136,7 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 	if scheduleChanged(op) {
 		model.NextRunAt = nextRunAt(
 			effectiveTime(op.PlannedAt, existing.PlannedAt),
-			effectiveIntervalType(op.IntervalType, existing.IntervalType),
+			effectiveIntervalType(op.IntervalType, intervalTypeValue(existing.IntervalType)),
 			effectiveInterval(op.Interval, existingInterval(existing.Interval)),
 		)
 	}
@@ -217,14 +224,14 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			})
 		}
 
-		if op.IsRecurring {
+		if op.IsRecurring && op.IntervalType != nil {
 			base := op.PlannedAt
 			if op.NextRunAt != nil {
 				base = *op.NextRunAt
 			}
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
-				NextRunAt: nextRunAt(base, op.IntervalType, existingInterval(op.Interval)),
+				NextRunAt: nextRunAt(base, *op.IntervalType, existingInterval(op.Interval)),
 			})
 		} else {
 			updatedOps = append(updatedOps, models.PlannedOperation{
@@ -254,10 +261,17 @@ func (s *PlannedOperationService) GetNearestIncomeDate(
 }
 
 func nextRunAt(plannedAt time.Time, intervalType models.IntervalType, interval int) time.Time {
-	if plannedAt.After(time.Now()) {
+	if intervalType == "" || plannedAt.After(time.Now()) {
 		return plannedAt
 	}
 	return NextDate(plannedAt, intervalType, interval)
+}
+
+func intervalTypeValue(intervalType *models.IntervalType) models.IntervalType {
+	if intervalType == nil {
+		return ""
+	}
+	return *intervalType
 }
 
 func scheduleChanged(op *dto.PlannedOperationUpdate) bool {
@@ -305,6 +319,19 @@ func (s *PlannedOperationService) applyExecution(
 	}
 
 	return nil
+}
+
+func (s *PlannedOperationService) GetNearestExpense(ctx context.Context, userID uuid.UUID, params repositories.ListParams) (*dto.PlannedOperationResponse, error) {
+	nearest, err := s.plannedOperationRepo.NearestExpense(ctx, userID, params)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		s.logger.Errorw("failed to get nearest expense", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	return nearest, nil
 }
 
 func (s *PlannedOperationService) getBalances(ctx context.Context, ops []dto.PlannedOperationDueResponse) (map[uuid.UUID]decimal.Decimal, error) {

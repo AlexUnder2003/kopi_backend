@@ -19,7 +19,7 @@ type PlannedOperationItem struct {
 	Currency     string `json:"currency"`
 	CategoryID   string `json:"category_id"`
 	Category     string `json:"category"`
-	IntervalType string `json:"interval_type"`
+	IntervalType string `json:"interval_type,omitempty"`
 	PlannedDate  string `json:"planned_date"`
 	NextRunDate  string `json:"next_run_date,omitempty"`
 	IsRecurring  bool   `json:"is_recurring"`
@@ -38,7 +38,7 @@ type CreatePlannedOperationArgs struct {
 	Type         string `json:"type" jsonschema:"income or expense."`
 	AccountID    string `json:"account_id" jsonschema:"Account UUID from list_accounts."`
 	CategoryID   string `json:"category_id" jsonschema:"Category UUID from list_categories."`
-	IntervalType string `json:"interval_type" jsonschema:"daily, weekly, biweekly, monthly, or custom."`
+	IntervalType string `json:"interval_type,omitempty" jsonschema:"Optional. daily, weekly, biweekly, monthly, or custom. Omit for a one-time plan."`
 	Interval     int    `json:"interval,omitempty" jsonschema:"Number of days. Required when interval_type is custom."`
 	PlannedDate  string `json:"planned_date" jsonschema:"First run date, YYYY-MM-DD."`
 	IsRecurring  bool   `json:"is_recurring,omitempty" jsonschema:"Repeat on the interval. Defaults to false."`
@@ -46,7 +46,7 @@ type CreatePlannedOperationArgs struct {
 
 func (o *CreatePlannedOperationArgs) Model() (*appdto.PlannedOperationPost, error) {
 	var p parsed
-	intervalType := p.requiredIntervalType(o.IntervalType)
+	intervalType := p.optionalIntervalType(o.IntervalType)
 	if intervalType == models.IntervalTypeCustom && o.Interval < 1 && p.err == nil {
 		p.err = errors.New("interval must be at least 1 day when interval_type is custom")
 	}

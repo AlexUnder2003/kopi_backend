@@ -28,8 +28,8 @@ func (t *CategoriesToolkit) ListCategories(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 
-	items := make([]agentdto.CategoryItem, 0, len(categories))
-	for _, category := range categories {
+	items := make([]agentdto.CategoryItem, 0, len(categories.Categories))
+	for _, category := range categories.Categories {
 		items = append(items, agentdto.CategoryItem{
 			ID:       category.ID.String(),
 			Name:     category.Name,

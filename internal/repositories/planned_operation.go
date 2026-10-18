@@ -28,7 +28,8 @@ const plannedOperationSelectColumns = `
 	a.icon AS "account.icon",
 	c.id AS "category.id",
 	c.name AS "category.name",
-	c.icon AS "category.icon"`
+	c.icon AS "category.icon",
+	CASE WHEN c.user_id IS NULL THEN TRUE ELSE FALSE END AS "category.is_system"`
 
 type PlannedOperationRepository struct {
 	db *sql.DB
@@ -52,7 +53,7 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 			INSERT INTO planned_operations (
 				name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			VALUES ($1, $2, $3, $4, $5::interval_type, $6, $7, $8, $9, $10)
 			RETURNING id, name, account_id, amount, type, interval_type, "interval", category_id, planned_at, next_run_at, is_recurring
 		)
 		SELECT ` + plannedOperationSelectColumns + `
@@ -63,9 +64,26 @@ func (r *PlannedOperationRepository) Create(ctx context.Context, op *models.Plan
 	var resp dto.PlannedOperationResponse
 	if err := sqlscan.Get(
 		ctx, r.db, &resp, q,
-		op.Name, op.AccountID, op.Amount, op.Type, op.IntervalType, nullInt(op.Interval),
+		op.Name, op.AccountID, op.Amount, op.Type, nullString(string(op.IntervalType)), nullInt(op.Interval),
 		op.CategoryID, op.PlannedAt, nullTime(op.NextRunAt), op.IsRecurring,
 	); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (r *PlannedOperationRepository) NearestExpense(ctx context.Context, userID uuid.UUID, params ListParams) (*dto.PlannedOperationResponse, error) {
+	const q = `
+		SELECT ` + plannedOperationSelectColumns + `
+		FROM planned_operations p
+		JOIN accounts a ON a.id = p.account_id
+		JOIN categories c ON c.id = p.category_id
+		WHERE a.user_id = $1 AND p.type = 'expense'
+		ORDER BY p.next_run_at ASC
+		LIMIT 1`
+
+	var resp dto.PlannedOperationResponse
+	if err := sqlscan.Get(ctx, r.db, &resp, q, userID); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -86,9 +104,15 @@ func (r *PlannedOperationRepository) GetByID(ctx context.Context, id, userID uui
 	return &resp, nil
 }
 
-func (r *PlannedOperationRepository) List(ctx context.Context, params PlannedOperationListParams) ([]dto.PlannedOperationResponse, error) {
+type plannedOperationListRow struct {
+	dto.PlannedOperationResponse
+	TotalCount int `db:"total_count"`
+}
+
+func (r *PlannedOperationRepository) List(ctx context.Context, params PlannedOperationListParams) ([]dto.PlannedOperationResponse, int, error) {
 	const q = `
-		SELECT ` + plannedOperationSelectColumns + `
+		SELECT ` + plannedOperationSelectColumns + `,
+			COUNT(*) OVER() AS total_count
 		FROM planned_operations p
 		JOIN accounts a ON a.id = p.account_id
 		JOIN categories c ON c.id = p.category_id
@@ -98,8 +122,8 @@ func (r *PlannedOperationRepository) List(ctx context.Context, params PlannedOpe
 			ORDER BY p.planned_at
 			LIMIT $6 OFFSET $7`
 
-	var resp []dto.PlannedOperationResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q,
+	var rows []plannedOperationListRow
+	if err := sqlscan.Select(ctx, r.db, &rows, q,
 		nullUUID(params.UserID),
 		nullUUID(params.AccountID),
 		nullTime(params.StartDate),
@@ -108,9 +132,17 @@ func (r *PlannedOperationRepository) List(ctx context.Context, params PlannedOpe
 		nullInt(params.Limit),
 		nullInt(params.Offset),
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return resp, nil
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+
+	resp := make([]dto.PlannedOperationResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = row.PlannedOperationResponse
+	}
+	return resp, rows[0].TotalCount, nil
 }
 
 func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.PlannedOperation) (*dto.PlannedOperationResponse, error) {

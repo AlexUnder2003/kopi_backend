@@ -81,23 +81,37 @@ func (r *AccountRepository) GetByIDs(ctx context.Context, operations []dto.Plann
 	return resp, nil
 }
 
-func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.AccountResponse, error) {
+type accountListRow struct {
+	dto.AccountResponse
+	TotalCount int `db:"total_count"`
+}
+
+func (r *AccountRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.AccountResponse, int, error) {
 	const q = `
-		SELECT ` + accountSelectColumns + `
+		SELECT ` + accountSelectColumns + `,
+			COUNT(*) OVER() AS total_count
 		FROM accounts AS a
 		WHERE a.user_id = $1
 			AND (a.name ILIKE '%' || $2 || '%' OR $2 IS NULL)
 		ORDER BY a.name
 		LIMIT $3 OFFSET $4`
 
-	var resp []dto.AccountResponse
+	var rows []accountListRow
 	if err := sqlscan.Select(
-		ctx, r.db, &resp, q,
+		ctx, r.db, &rows, q,
 		userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset),
 	); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return resp, nil
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+
+	resp := make([]dto.AccountResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = row.AccountResponse
+	}
+	return resp, rows[0].TotalCount, nil
 }
 
 func (r *AccountRepository) CountByUser(ctx context.Context, userID uuid.UUID) (int, error) {

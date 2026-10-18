@@ -28,6 +28,6 @@ type Budget struct {
 	Interval     int             `db:"interval"`
 	StartDate    time.Time       `db:"start_date"`
 	ResetDate    time.Time       `db:"reset_date"`
-	CategoryID   uuid.UUID       `db:"category_id"`
+	CategoryIDs  []uuid.UUID     `db:"category_ids"`
 	IsActive     bool            `db:"is_active"`
 }

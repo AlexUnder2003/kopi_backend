@@ -128,11 +128,3 @@ func (p *parsed) optionalIntervalType(raw string) models.IntervalType {
 		return ""
 	}
 }
-
-func (p *parsed) requiredIntervalType(raw string) models.IntervalType {
-	intervalType := p.optionalIntervalType(raw)
-	if intervalType == "" && p.err == nil {
-		p.err = errors.New("interval_type is required")
-	}
-	return intervalType
-}

@@ -51,20 +51,34 @@ func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*dto.Ca
 	return &resp, nil
 }
 
-func (r *CategoryRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.CategoryResponse, error) {
+type categoryListRow struct {
+	dto.CategoryResponse
+	TotalCount int `db:"total_count"`
+}
+
+func (r *CategoryRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.CategoryResponse, int, error) {
 	const q = `
-		SELECT ` + categorySelectColumns + `
+		SELECT ` + categorySelectColumns + `,
+			COUNT(*) OVER() AS total_count
  		FROM categories
 		WHERE (user_id IS NULL OR user_id = $1)
 			AND (name ILIKE '%' || $2 || '%' OR $2 IS NULL)
 		ORDER BY name
 		LIMIT $3 OFFSET $4`
 
-	var resp []dto.CategoryResponse
-	if err := sqlscan.Select(ctx, r.db, &resp, q, userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset)); err != nil {
-		return nil, err
+	var rows []categoryListRow
+	if err := sqlscan.Select(ctx, r.db, &rows, q, userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset)); err != nil {
+		return nil, 0, err
 	}
-	return resp, nil
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+
+	resp := make([]dto.CategoryResponse, len(rows))
+	for i, row := range rows {
+		resp[i] = row.CategoryResponse
+	}
+	return resp, rows[0].TotalCount, nil
 }
 
 func (r *CategoryRepository) GetTransferCategoryID(ctx context.Context) (uuid.UUID, error) {

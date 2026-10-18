@@ -89,10 +89,14 @@ func (s *AccountService) GetByID(ctx context.Context, id, userID uuid.UUID) (*dt
 }
 
 func (s *AccountService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams, currency string) (*dto.AccountResponseList, error) {
-	accounts, err := s.accountRepo.List(ctx, userID, params)
+	accounts, total, err := s.accountRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list accounts", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if accounts == nil {
+		accounts = []dto.AccountResponse{}
 	}
 
 	var totalBalance decimal.Decimal
@@ -121,6 +125,7 @@ func (s *AccountService) List(ctx context.Context, userID uuid.UUID, params repo
 	return &dto.AccountResponseList{
 		Accounts:     accounts,
 		TotalBalance: totalBalance,
+		TotalCount:   total,
 	}, nil
 
 }

@@ -57,13 +57,21 @@ func (s *CategoryService) GetByID(ctx context.Context, id, userID uuid.UUID) (*d
 	return cat, nil
 }
 
-func (s *CategoryService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) ([]dto.CategoryResponse, error) {
-	categories, err := s.categoryRepo.List(ctx, userID, params)
+func (s *CategoryService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) (*dto.CategoryResponseList, error) {
+	categories, total, err := s.categoryRepo.List(ctx, userID, params)
 	if err != nil {
 		s.logger.Errorw("failed to list categories", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
-	return categories, nil
+
+	if categories == nil {
+		categories = []dto.CategoryResponse{}
+	}
+
+	return &dto.CategoryResponseList{
+		Categories: categories,
+		TotalCount: total,
+	}, nil
 }
 
 func (s *CategoryService) Update(ctx context.Context, userID uuid.UUID, category *models.Category) (*dto.CategoryResponse, error) {

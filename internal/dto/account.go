@@ -65,4 +65,5 @@ type AccountResponse struct {
 type AccountResponseList struct {
 	Accounts     []AccountResponse `json:"accounts"`
 	TotalBalance decimal.Decimal   `json:"total_balance"`
+	TotalCount   int               `json:"total_count"`
 }

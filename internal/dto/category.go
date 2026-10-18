@@ -23,6 +23,11 @@ type CategoryUpdate struct {
 	Icon string `json:"icon,omitempty"`
 }
 
+type CategoryResponseList struct {
+	Categories []CategoryResponse `json:"categories"`
+	TotalCount int                `json:"total_count"`
+}
+
 type CategoryResponse struct {
 	ID       uuid.UUID `json:"id" db:"id"`
 	Name     string    `json:"name" db:"name"`

@@ -32,7 +32,7 @@ func (r *PlannedOperationPost) Validate() error {
 	if !validOperationType(r.Type) {
 		return errors.New("type")
 	}
-	if !validIntervalType(r.IntervalType) {
+	if r.IntervalType != "" && !validIntervalType(r.IntervalType) {
 		return errors.New("interval_type")
 	}
 	if r.IntervalType == models.IntervalTypeCustom && r.Interval < 1 {
@@ -83,13 +83,18 @@ type PlannedOperationDueResponse struct {
 	UserID uuid.UUID `db:"user_id"`
 }
 
+type PlannedOperationResponseList struct {
+	PlannedOperations []PlannedOperationResponse `json:"planned_operations"`
+	TotalCount        int                        `json:"total_count"`
+}
+
 type PlannedOperationResponse struct {
 	ID           uuid.UUID            `json:"id" db:"id"`
 	Name         string               `json:"name" db:"name"`
 	Account      AccountResponseShort `json:"account" db:"account"`
 	Amount       decimal.Decimal      `json:"amount" db:"amount"`
 	Type         models.OperationType `json:"type" db:"type"`
-	IntervalType models.IntervalType  `json:"interval_type" db:"interval_type"`
+	IntervalType *models.IntervalType `json:"interval_type" db:"interval_type"`
 	Interval     *int                 `json:"interval" db:"interval"`
 	Category     CategoryResponse     `json:"category" db:"category"`
 	PlannedAt    time.Time            `json:"planned_date" db:"planned_at"`

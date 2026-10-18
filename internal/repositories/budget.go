@@ -23,10 +23,25 @@ const budgetSelectColumns = `
 	b.currency,
 	b.start_date,
 	b.reset_date,
-	b.is_active,
-	c.id AS "category.id",
-	c.name AS "category.name",
-	c.icon AS "category.icon"`
+	b.is_active`
+
+const budgetCategoriesColumn = `
+	COALESCE(
+		jsonb_agg(
+			jsonb_build_object(
+				'id', c.id,
+				'name', c.name,
+				'icon', c.icon,
+				'is_system', c.user_id IS NULL
+			)
+			ORDER BY c.name
+		) FILTER (WHERE c.id IS NOT NULL),
+		'[]'::jsonb
+	) AS categories`
+
+const budgetCategoryJoins = `
+	LEFT JOIN budget_categories bc ON bc.budget_id = b.id
+	LEFT JOIN categories c ON c.id = bc.category_id`
 
 type BudgetRepository struct {
 	db *sql.DB
@@ -37,32 +52,51 @@ func NewBudgetRepository(db *sql.DB) *BudgetRepository {
 }
 
 func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*dto.BudgetResponse, error) {
-	const q = `
-		WITH inserted AS (
-			INSERT INTO budgets (
-				name, amount, balance, user_id, currency, interval_type, "interval", start_date, reset_date, category_id
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-				RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, is_active, category_id
-			)
-			SELECT ` + budgetSelectColumns + `
-			FROM inserted b
-		JOIN categories c ON c.id = b.category_id`
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	const insertBudget = `
+		INSERT INTO budgets (
+			name, amount, balance, user_id, currency, interval_type, "interval", start_date, reset_date
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id, name, amount, balance, interval_type, "interval", currency, start_date, reset_date, is_active`
 
 	var resp dto.BudgetResponse
 	if err := sqlscan.Get(
-		ctx, r.db, &resp, q,
+		ctx, tx, &resp, insertBudget,
 		budget.Name,
 		budget.Amount,
-		budget.Amount,
+		budget.Balance,
 		budget.UserID,
 		budget.Currency,
 		budget.IntervalType,
 		nullInt(budget.Interval),
 		budget.StartDate,
 		budget.ResetDate,
-		budget.CategoryID,
 	); err != nil {
+		return nil, err
+	}
+
+	const insertCategories = `
+		WITH linked AS (
+			INSERT INTO budget_categories (budget_id, user_id, category_id)
+			SELECT $1, $2, category_id
+			FROM unnest($3::uuid[]) AS category_id
+			RETURNING category_id
+		)
+		SELECT ` + budgetCategoriesColumn + `
+		FROM linked l
+		JOIN categories c ON c.id = l.category_id`
+
+	if err := tx.QueryRowContext(ctx, insertCategories, resp.ID, budget.UserID, budget.CategoryIDs).Scan(&resp.Categories); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -70,10 +104,12 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *models.Budget) (*
 
 func (r *BudgetRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (*dto.BudgetResponse, error) {
 	const q = `
-		SELECT ` + budgetSelectColumns + `
+		SELECT ` + budgetSelectColumns + `,
+			` + budgetCategoriesColumn + `
 		FROM budgets b
-		JOIN categories c ON c.id = b.category_id
-		WHERE b.id = $1 AND b.user_id = $2`
+		` + budgetCategoryJoins + `
+		WHERE b.id = $1 AND b.user_id = $2
+		GROUP BY b.id`
 
 	var resp dto.BudgetResponse
 	if err := sqlscan.Get(ctx, r.db, &resp, q, id, userID); err != nil {
@@ -82,21 +118,39 @@ func (r *BudgetRepository) GetByID(ctx context.Context, id, userID uuid.UUID) (*
 	return &resp, nil
 }
 
-func (r *BudgetRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.BudgetResponse, error) {
+func (r *BudgetRepository) List(ctx context.Context, userID uuid.UUID, params ListParams) ([]dto.BudgetResponse, int, error) {
 	const q = `
-		SELECT ` + budgetSelectColumns + `
-		FROM budgets b
-		JOIN categories c ON c.id = b.category_id
-		WHERE b.user_id = $1
-			AND (b.name ILIKE '%' || $2 || '%' OR $2 IS NULL)
-		ORDER BY c.name
-		LIMIT $3 OFFSET $4`
+		WITH page AS (
+			SELECT ` + budgetSelectColumns + `
+			FROM budgets b
+			WHERE b.user_id = $1
+				AND (b.name ILIKE '%' || $2 || '%' OR $2 IS NULL)
+			ORDER BY b.name
+			LIMIT $3 OFFSET $4
+		)
+		SELECT ` + budgetSelectColumns + `,
+			` + budgetCategoriesColumn + `
+		FROM page b
+		` + budgetCategoryJoins + `
+		GROUP BY b.id, b.name, b.amount, b.balance, b.interval_type, b."interval", b.currency, b.start_date, b.reset_date, b.is_active
+		ORDER BY b.name`
 
 	var resp []dto.BudgetResponse
 	if err := sqlscan.Select(ctx, r.db, &resp, q, userID, nullString(params.Filter), nullInt(params.Limit), nullInt(params.Offset)); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return resp, nil
+
+	const countQuery = `
+		SELECT COUNT(*)
+		FROM budgets
+		WHERE user_id = $1
+			AND (name ILIKE '%' || $2 || '%' OR $2 IS NULL)`
+
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, userID, nullString(params.Filter)).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	return resp, total, nil
 }
 
 func (r *BudgetRepository) CountByUser(ctx context.Context, userID uuid.UUID) (int, error) {
@@ -109,6 +163,23 @@ func (r *BudgetRepository) CountByUser(ctx context.Context, userID uuid.UUID) (i
 	return count, nil
 }
 
+func (r *BudgetRepository) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID) (decimal.Decimal, error) {
+	const q = `
+		SELECT COALESCE(SUM(o.amount), 0)
+		FROM operations o
+		JOIN accounts a ON a.id = o.account_id
+		WHERE a.user_id = $1
+			AND o.category_id = ANY($2::uuid[])
+			AND o.type = 'expense'`
+
+	var amount decimal.Decimal
+	if err := r.db.QueryRowContext(ctx, q, userID, categoryIDs).Scan(&amount); err != nil {
+		return decimal.Zero, err
+	}
+
+	return amount, nil
+}
+
 func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*dto.BudgetResponse, error) {
 	const q = `
 		WITH updated AS (
@@ -117,15 +188,17 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 			    amount = COALESCE($3::numeric, amount),
 			    interval_type = COALESCE($4::interval_type, interval_type),
 			    "interval" = COALESCE($5::int, "interval"),
-				    start_date = COALESCE($6::date, start_date),
-				    reset_date = COALESCE($7::date, reset_date),
-				    is_active = COALESCE($8::boolean, is_active)
-				WHERE id = $1
-				RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, is_active, category_id
-			)
-			SELECT ` + budgetSelectColumns + `
-			FROM updated b
-			JOIN categories c ON c.id = b.category_id`
+			    start_date = COALESCE($6::date, start_date),
+			    reset_date = COALESCE($7::date, reset_date),
+			    is_active = COALESCE($8::boolean, is_active)
+			WHERE id = $1
+			RETURNING id, name, amount, balance, currency, interval_type, "interval", start_date, reset_date, is_active
+		)
+		SELECT ` + budgetSelectColumns + `,
+			` + budgetCategoriesColumn + `
+		FROM updated b
+		` + budgetCategoryJoins + `
+		GROUP BY b.id, b.name, b.amount, b.balance, b.interval_type, b."interval", b.currency, b.start_date, b.reset_date, b.is_active`
 
 	var resp dto.BudgetResponse
 	if err := sqlscan.Get(
@@ -146,11 +219,12 @@ func (r *BudgetRepository) Update(ctx context.Context, budget *models.Budget) (*
 
 func (r *BudgetRepository) GetByCategoryID(ctx context.Context, userID, categoryID uuid.UUID, currency string, tx *sql.Tx) (uuid.UUID, error) {
 	const q = `
-		SELECT id
-		FROM budgets
-		WHERE user_id = $1 AND category_id = $2 AND currency = $3
-		AND is_active = TRUE
-		FOR UPDATE SKIP LOCKED`
+		SELECT b.id
+		FROM budgets b
+		JOIN budget_categories bc ON bc.budget_id = b.id
+		WHERE b.user_id = $1 AND bc.category_id = $2 AND b.currency = $3
+			AND b.is_active = TRUE
+		FOR UPDATE OF b SKIP LOCKED`
 
 	var id uuid.UUID
 	if err := tx.QueryRowContext(ctx, q, userID, categoryID, currency).Scan(&id); err != nil {
@@ -180,11 +254,15 @@ func (r *BudgetRepository) BulkUpdateBalance(ctx context.Context, updates []dto.
 		UPDATE budgets AS b
 		SET balance = b.balance + v.delta
 		FROM (
-			SELECT user_id::uuid, category_id::uuid, currency::text, SUM(delta::numeric) AS delta
+			SELECT bc.budget_id, u.currency, SUM(u.delta::numeric) AS delta
 			FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS u(user_id, category_id, currency, delta)
-			GROUP BY user_id, category_id, currency
+			JOIN budget_categories bc
+				ON bc.user_id = u.user_id::uuid
+				AND bc.category_id = u.category_id::uuid
+			GROUP BY bc.budget_id, u.currency
 		) AS v
-			WHERE b.user_id = v.user_id AND b.category_id = v.category_id AND b.currency::text = v.currency`
+		WHERE b.id = v.budget_id
+			AND b.currency::text = v.currency`
 
 	_, err := DBorTx(r.db, tx).ExecContext(ctx, q, userIDs, categoryIDs, currencies, deltas)
 	return err
@@ -226,9 +304,9 @@ func (r *BudgetRepository) GetByResetDate(ctx context.Context, resetDate time.Ti
 	const q = `
 		SELECT ` + budgetSelectColumns + `
 		FROM budgets b
-		JOIN categories c ON c.id = b.category_id
 		WHERE b.reset_date <= $1 AND b.is_active = TRUE
 		FOR UPDATE OF b SKIP LOCKED`
+
 	var resp []dto.BudgetResponse
 	if err := sqlscan.Select(ctx, tx, &resp, q, resetDate); err != nil {
 		return nil, err
