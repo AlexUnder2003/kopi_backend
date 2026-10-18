@@ -112,7 +112,7 @@ func (s *UserService) SendOTP(ctx context.Context, email string) error {
 			return apperrors.Internal(errInternalServerError)
 		}
 
-		user, err = s.createWithSubscription(ctx, &models.User{Email: email})
+		user, err = s.Create(ctx, &models.User{Email: email})
 		if err != nil {
 			return err
 		}
