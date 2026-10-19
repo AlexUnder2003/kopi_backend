@@ -163,14 +163,16 @@ func (r *BudgetRepository) CountByUser(ctx context.Context, userID uuid.UUID) (i
 	return count, nil
 }
 
-func (r *BudgetRepository) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID) (decimal.Decimal, error) {
+func (r *BudgetRepository) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID, startDate time.Time, endDate time.Time) (decimal.Decimal, error) {
 	const q = `
 		SELECT COALESCE(SUM(o.amount), 0)
 		FROM operations o
 		JOIN accounts a ON a.id = o.account_id
 		WHERE a.user_id = $1
 			AND o.category_id = ANY($2::uuid[])
-			AND o.type = 'expense'`
+			AND o.type = 'expense'
+			AND o.occurrence_date >= $3::date
+			AND o.occurrence_date <= $4::date`
 
 	var amount decimal.Decimal
 	if err := r.db.QueryRowContext(ctx, q, userID, categoryIDs).Scan(&amount); err != nil {

@@ -12,6 +12,7 @@ type PlannedOperation struct {
 	Name         string          `db:"name"`
 	AccountID    uuid.UUID       `db:"account_id"`
 	Amount       decimal.Decimal `db:"amount"`
+	Balance      decimal.Decimal `db:"balance"`
 	Type         OperationType   `db:"type"`
 	IntervalType IntervalType    `db:"interval_type"`
 	Interval     int             `db:"interval"`

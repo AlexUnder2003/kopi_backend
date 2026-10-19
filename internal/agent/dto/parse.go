@@ -47,6 +47,19 @@ func (p *parsed) optionalUUID(raw, field string) uuid.UUID {
 	return p.requiredUUID(raw, field)
 }
 
+func (p *parsed) optionalBalance(raw string) decimal.Decimal {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || p.err != nil {
+		return decimal.Decimal{}
+	}
+	amount, err := decimal.NewFromString(raw)
+	if err != nil || amount.IsNegative() {
+		p.err = errors.New("balance must be a non-negative decimal")
+		return decimal.Decimal{}
+	}
+	return amount
+}
+
 func (p *parsed) optionalAmount(raw string) decimal.Decimal {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || p.err != nil {
@@ -91,7 +104,7 @@ func (p *parsed) optionalOperationType(raw string, allowTransfer bool) models.Op
 	}
 	opType := models.OperationType(raw)
 	switch opType {
-	case models.OperationTypeIncome, models.OperationTypeExpense:
+	case models.OperationTypeIncome, models.OperationTypeExpense, models.OperationTypeReservation:
 		return opType
 	case models.OperationTypeTransfer:
 		if allowTransfer {
@@ -99,9 +112,9 @@ func (p *parsed) optionalOperationType(raw string, allowTransfer bool) models.Op
 		}
 	}
 	if allowTransfer {
-		p.err = errors.New("type must be income, expense, or transfer")
+		p.err = errors.New("type must be income, expense, transfer, or reservation")
 	} else {
-		p.err = errors.New("type must be income or expense")
+		p.err = errors.New("type must be income, expense, or reservation")
 	}
 	return ""
 }

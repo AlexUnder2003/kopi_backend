@@ -33,28 +33,24 @@ func (r *OperationUpdate) Validate() error {
 	if r.Type != "" && !validOperationType(r.Type) {
 		return errors.New("type")
 	}
-	if r.FromAccountID != uuid.Nil && r.AccountID != uuid.Nil && r.FromAccountID == r.AccountID {
-		return errors.New("from_account_id")
-	}
 	return nil
 }
 
 type OperationPost struct {
-	Name           string               `json:"name"`
-	Amount         decimal.Decimal      `json:"amount"`
-	Type           models.OperationType `json:"type"`
-	AccountID      uuid.UUID            `json:"account_id,omitempty"`
-	FromAccountID  uuid.UUID            `json:"from_account_id,omitempty"`
-	CategoryID     uuid.UUID            `json:"category_id"`
-	OccurrenceDate time.Time            `json:"occurrence_date"`
+	Name               string               `json:"name"`
+	Amount             decimal.Decimal      `json:"amount"`
+	Type               models.OperationType `json:"type"`
+	AccountID          uuid.UUID            `json:"account_id,omitempty"`
+	FromAccountID      uuid.UUID            `json:"from_account_id,omitempty"`
+	CategoryID         uuid.UUID            `json:"category_id"`
+	PlannedOperationID uuid.UUID            `json:"planned_operation_id,omitempty"`
+	OccurrenceDate     time.Time            `json:"occurrence_date"`
 }
 
 type OperationUpdate struct {
 	Name           string               `json:"name,omitempty"`
 	Amount         decimal.Decimal      `json:"amount,omitempty"`
 	Type           models.OperationType `json:"type,omitempty"`
-	AccountID      uuid.UUID            `json:"account_id,omitempty"`
-	FromAccountID  uuid.UUID            `json:"from_account_id,omitempty"`
 	CategoryID     uuid.UUID            `json:"category_id,omitempty"`
 	OccurrenceDate time.Time            `json:"occurrence_date,omitempty"`
 }
@@ -65,23 +61,39 @@ type OperationResponseList struct {
 }
 
 type OperationResponse struct {
-	ID             uuid.UUID            `json:"id" db:"id"`
-	Name           string               `json:"name" db:"name"`
-	Amount         decimal.Decimal      `json:"amount" db:"amount"`
-	Type           models.OperationType `json:"type" db:"type"`
-	Account        AccountResponseShort `json:"account,omitempty" db:"account"`
-	Category       CategoryResponse     `json:"category" db:"category"`
-	OccurrenceDate time.Time            `json:"occurrence_date" db:"occurrence_date"`
+	ID                 uuid.UUID            `json:"id" db:"id"`
+	Name               string               `json:"name" db:"name"`
+	Amount             decimal.Decimal      `json:"amount" db:"amount"`
+	Type               models.OperationType `json:"type" db:"type"`
+	Account            AccountResponseShort `json:"account,omitempty" db:"account"`
+	Category           CategoryResponse     `json:"category" db:"category"`
+	PlannedOperationID *uuid.UUID           `json:"planned_operation_id,omitempty" db:"planned_operation_id"`
+	OccurrenceDate     time.Time            `json:"occurrence_date" db:"occurrence_date"`
+}
+
+type OperationResponseReservation struct {
+	OperationResponse
+	PlannedOperation *PlannedOperationResponseShort `json:"planned_operation,omitempty"`
 }
 
 type OperationResponseTransfer struct {
 	OperationResponse
-	FromAccount AccountResponseShort `json:"from_account" db:"from_account"`
+	FromAccount      AccountResponseShort          `json:"from_account" db:"from_account"`
+	PlannedOperation PlannedOperationResponseShort `json:"-" db:"planned_operation"`
 }
 
 func (r OperationResponseTransfer) Response() any {
-	if r.Type == models.OperationTypeTransfer {
+	switch r.Type {
+	case models.OperationTypeTransfer:
 		return r
+	case models.OperationTypeReservation:
+		reservation := OperationResponseReservation{OperationResponse: r.OperationResponse}
+		if r.PlannedOperation.ID != uuid.Nil {
+			planned := r.PlannedOperation
+			reservation.PlannedOperation = &planned
+		}
+		return reservation
+	default:
+		return r.OperationResponse
 	}
-	return r.OperationResponse
 }

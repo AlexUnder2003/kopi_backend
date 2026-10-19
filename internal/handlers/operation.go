@@ -126,8 +126,6 @@ func (h *OperationHandler) Update(c *echo.Context) error {
 		Name:           req.Name,
 		Amount:         req.Amount,
 		Type:           req.Type,
-		AccountID:      req.AccountID,
-		FromAccountID:  req.FromAccountID,
 		CategoryID:     req.CategoryID,
 		OccurrenceDate: req.OccurrenceDate,
 	})

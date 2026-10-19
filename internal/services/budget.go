@@ -41,8 +41,8 @@ func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.
 	}
 }
 
-func (s *BudgetService) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID) (decimal.Decimal, error) {
-	alreadySpent, err := s.budgetRepo.GetAlreadySpent(ctx, userID, categoryIDs)
+func (s *BudgetService) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID, startDate time.Time, endDate time.Time) (decimal.Decimal, error) {
+	alreadySpent, err := s.budgetRepo.GetAlreadySpent(ctx, userID, categoryIDs, startDate, endDate)
 	if err != nil {
 		s.logger.Errorw("failed to get already spent", "error", err)
 		return decimal.Zero, apperrors.Internal(errInternalServerError)
@@ -71,7 +71,7 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		budget.StartDate = s.CalculateStartDate()
 	}
 
-	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs)
+	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs, budget.StartDate, NextDate(budget.StartDate, budget.IntervalType, budget.Interval))
 	if err != nil {
 		s.logger.Errorw("failed to get already spent", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
@@ -79,6 +79,9 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 
 	if budget.AlreadySpent.LessThan(alreadySpent) {
 		budget.AlreadySpent = alreadySpent
+	} else if budget.AlreadySpent.GreaterThan(budget.Amount) {
+		s.logger.Errorw("already spent is greater than amount", "error", errMsgAlreadySpentGreaterThanAmount)
+		return nil, apperrors.BadRequest(errMsgAlreadySpentGreaterThanAmount)
 	}
 
 	budgetModel := &models.Budget{

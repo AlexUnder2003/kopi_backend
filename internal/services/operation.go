@@ -131,25 +131,14 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 		return nil, err
 	}
 
-	accountID := existing.Account.ID
-	if operation.AccountID != uuid.Nil {
-		accountID = operation.AccountID
-	}
-
-	account, err := s.accountService.GetByID(ctx, accountID, userID)
+	account, err := s.accountService.GetByID(ctx, existing.Account.ID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	fromAccountID := existing.FromAccount.ID
-
-	if operation.FromAccountID != uuid.Nil {
-		fromAccountID = operation.FromAccountID
-	}
-
 	var fromAccount *dto.AccountResponse
-	if fromAccountID != uuid.Nil {
-		fromAccount, err = s.accountService.GetByID(ctx, fromAccountID, userID)
+	if existing.FromAccount.ID != uuid.Nil {
+		fromAccount, err = s.accountService.GetByID(ctx, existing.FromAccount.ID, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -159,14 +148,6 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 
 	switch existing.Type {
 	case models.OperationTypeTransfer:
-		if fromAccount == nil {
-			return nil, apperrors.BadRequest("from account ID is required")
-		}
-
-		if fromAccount.Currency != account.Currency {
-			return nil, apperrors.BadRequest("currency mismatch")
-		}
-
 		if delta.IsPositive() && fromAccount.Balance.LessThan(delta) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}

@@ -20,7 +20,7 @@ func validIntervalType(intervalType models.IntervalType) bool {
 
 func validOperationType(opType models.OperationType) bool {
 	switch opType {
-	case models.OperationTypeIncome, models.OperationTypeExpense, models.OperationTypeTransfer:
+	case models.OperationTypeIncome, models.OperationTypeExpense, models.OperationTypeTransfer, models.OperationTypeReservation:
 		return true
 	default:
 		return false

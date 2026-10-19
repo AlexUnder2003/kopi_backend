@@ -13,11 +13,12 @@ import (
 )
 
 const operationSelectColumns = `
-	t.id,
-	t.name,
-	t.amount,
-	t.type,
-	t.occurrence_date,
+		t.id,
+		t.name,
+		t.amount,
+		t.type,
+		t.planned_operation_id,
+		t.occurrence_date,
 	a.id AS "account.id",
 	a.name AS "account.name",
 	a.currency AS "account.currency",
@@ -26,6 +27,8 @@ const operationSelectColumns = `
 	COALESCE(fa.name, '') AS "from_account.name",
 	COALESCE(fa.currency::text, '') AS "from_account.currency",
 	COALESCE(fa.icon, '') AS "from_account.icon",
+	po.id AS "planned_operation.id",
+	COALESCE(po.name, '') AS "planned_operation.name",
 	c.id AS "category.id",
 	c.name AS "category.name",
 	c.icon AS "category.icon",
@@ -34,14 +37,16 @@ const operationSelectColumns = `
 const operationJoins = `
 	JOIN accounts a ON a.id = t.account_id
 	JOIN categories c ON c.id = t.category_id
-	LEFT JOIN accounts fa ON fa.id = t.from_account_id`
+	LEFT JOIN accounts fa ON fa.id = t.from_account_id
+	LEFT JOIN planned_operations po ON po.id = t.planned_operation_id`
 
 type OperationListParams struct {
 	ListParams
-	AccountID  uuid.UUID
-	CategoryID uuid.UUID
-	StartDate  time.Time
-	EndDate    time.Time
+	AccountID          uuid.UUID
+	CategoryID         uuid.UUID
+	PlannedOperationID uuid.UUID
+	StartDate          time.Time
+	EndDate            time.Time
 }
 type OperationRepository struct {
 	db *sql.DB
@@ -54,9 +59,9 @@ func NewOperationRepository(db *sql.DB) *OperationRepository {
 func (r *OperationRepository) Create(ctx context.Context, op *models.Operation, tx *sql.Tx) (*dto.OperationResponseTransfer, error) {
 	const q = `
 		WITH inserted AS (
-			INSERT INTO operations (name, type, account_id, from_account_id, category_id, amount, occurrence_date)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, name, type, account_id, from_account_id, category_id, amount, occurrence_date
+				INSERT INTO operations (name, type, account_id, from_account_id, category_id, amount, occurrence_date, planned_operation_id)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				RETURNING id, name, type, account_id, from_account_id, category_id, amount, occurrence_date, planned_operation_id
 		)
 		SELECT ` + operationSelectColumns + `
 		FROM inserted t
@@ -65,7 +70,7 @@ func (r *OperationRepository) Create(ctx context.Context, op *models.Operation, 
 	var resp dto.OperationResponseTransfer
 	if err := sqlscan.Get(
 		ctx, DBorTx(r.db, tx), &resp, q,
-		op.Name, op.Type, op.AccountID, nullUUID(op.FromAccountID), op.CategoryID, op.Amount, op.OccurrenceDate,
+		op.Name, op.Type, op.AccountID, nullUUID(op.FromAccountID), op.CategoryID, op.Amount, op.OccurrenceDate, nullUUID(op.PlannedOperationID),
 	); err != nil {
 		return nil, err
 	}
@@ -103,8 +108,9 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 				AND (t.occurrence_date >= $4 OR $4 IS NULL)
 				AND (t.occurrence_date <= $5 OR $5 IS NULL)
 				AND (t.name ILIKE '%' || $6 || '%' OR $6 IS NULL)
+				AND (t.planned_operation_id = $7 OR $7 IS NULL)
 			ORDER BY t.occurrence_date DESC
-			LIMIT $7 OFFSET $8`
+			LIMIT $8 OFFSET $9`
 
 	var rows []operationListRow
 	if err := sqlscan.Select(
@@ -115,6 +121,7 @@ func (r *OperationRepository) List(ctx context.Context, params OperationListPara
 		nullTime(params.StartDate),
 		nullTime(params.EndDate),
 		nullString(params.Filter),
+		nullUUID(params.PlannedOperationID),
 		nullInt(params.Limit),
 		nullInt(params.Offset),
 	); err != nil {
@@ -140,10 +147,11 @@ func (r *OperationRepository) Update(ctx context.Context, op *models.Operation, 
 			    account_id = COALESCE($4, account_id),
 			    from_account_id = COALESCE($5, from_account_id),
 			    category_id = COALESCE($6, category_id),
-			    amount = COALESCE($7, amount),
-			    occurrence_date = COALESCE($8, occurrence_date)
-			WHERE id = $1
-			RETURNING id, name, type, account_id, from_account_id, category_id, amount, occurrence_date
+				    amount = COALESCE($7, amount),
+				    occurrence_date = COALESCE($8, occurrence_date),
+				    planned_operation_id = COALESCE($9, planned_operation_id)
+				WHERE id = $1
+				RETURNING id, name, type, account_id, from_account_id, category_id, amount, occurrence_date, planned_operation_id
 		)
 		SELECT ` + operationSelectColumns + `
 		FROM updated t
@@ -160,6 +168,7 @@ func (r *OperationRepository) Update(ctx context.Context, op *models.Operation, 
 		nullUUID(op.CategoryID),
 		nullDecimal(op.Amount),
 		nullTime(op.OccurrenceDate),
+		nullUUID(op.PlannedOperationID),
 	); err != nil {
 		return nil, err
 	}
@@ -178,6 +187,7 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, operations []model
 	categoryIDs := make([]string, len(operations))
 	amounts := make([]string, len(operations))
 	occurrenceDates := make([]string, len(operations))
+	plannedOperationIDs := make([]string, len(operations))
 
 	for i, operation := range operations {
 		names[i] = operation.Name
@@ -189,24 +199,28 @@ func (r *OperationRepository) BulkCreate(ctx context.Context, operations []model
 		categoryIDs[i] = operation.CategoryID.String()
 		amounts[i] = operation.Amount.String()
 		occurrenceDates[i] = operation.OccurrenceDate.UTC().Format(time.RFC3339)
+		if operation.PlannedOperationID != uuid.Nil {
+			plannedOperationIDs[i] = operation.PlannedOperationID.String()
+		}
 	}
 
 	const q = `
-		INSERT INTO operations (name, type, account_id, from_account_id, category_id, amount, occurrence_date)
-		SELECT
-			v.name,
-			v.type::operation_type,
-			v.account_id::uuid,
-			NULLIF(v.from_account_id, '')::uuid,
-			v.category_id::uuid,
-			v.amount::numeric,
-			v.occurrence_date::timestamptz
-		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
-			AS v(name, type, account_id, from_account_id, category_id, amount, occurrence_date)`
+			INSERT INTO operations (name, type, account_id, from_account_id, category_id, amount, occurrence_date, planned_operation_id)
+			SELECT
+				v.name,
+				v.type::operation_type,
+				v.account_id::uuid,
+				NULLIF(v.from_account_id, '')::uuid,
+				v.category_id::uuid,
+				v.amount::numeric,
+				v.occurrence_date::timestamptz,
+				NULLIF(v.planned_operation_id, '')::uuid
+			FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[])
+				AS v(name, type, account_id, from_account_id, category_id, amount, occurrence_date, planned_operation_id)`
 
 	_, err := DBorTx(r.db, tx).ExecContext(
 		ctx, q,
-		names, types, accountIDs, fromAccountIDs, categoryIDs, amounts, occurrenceDates,
+		names, types, accountIDs, fromAccountIDs, categoryIDs, amounts, occurrenceDates, plannedOperationIDs,
 	)
 	return err
 }

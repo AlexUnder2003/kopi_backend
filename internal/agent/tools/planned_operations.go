@@ -173,6 +173,7 @@ func plannedOperationView(op dto.PlannedOperationResponse) agentdto.PlannedOpera
 		ID:          op.ID.String(),
 		Name:        op.Name,
 		Amount:      op.Amount.String(),
+		Balance:     op.Balance.String(),
 		Type:        string(op.Type),
 		AccountID:   op.Account.ID.String(),
 		Account:     op.Account.Name,

@@ -207,7 +207,7 @@ func listParams(args agentdto.ListOperationsArgs) (repositories.OperationListPar
 func operationView(item any) (agentdto.OperationItem, bool) {
 	switch op := item.(type) {
 	case dto.OperationResponse:
-		return agentdto.OperationItem{
+		item := agentdto.OperationItem{
 			ID:             op.ID.String(),
 			Name:           op.Name,
 			Amount:         op.Amount.String(),
@@ -216,10 +216,20 @@ func operationView(item any) (agentdto.OperationItem, bool) {
 			Currency:       op.Account.Currency,
 			Category:       op.Category.Name,
 			OccurrenceDate: op.OccurrenceDate.UTC().Format(time.RFC3339),
-		}, true
+		}
+		if op.PlannedOperationID != nil {
+			item.PlannedOperationID = op.PlannedOperationID.String()
+		}
+		return item, true
 	case dto.OperationResponseTransfer:
 		view, _ := operationView(op.OperationResponse)
 		view.FromAccount = op.FromAccount.Name
+		return view, true
+	case dto.OperationResponseReservation:
+		view, _ := operationView(op.OperationResponse)
+		if op.PlannedOperation != nil {
+			view.PlannedOperationID = op.PlannedOperation.ID.String()
+		}
 		return view, true
 	default:
 		return agentdto.OperationItem{}, false

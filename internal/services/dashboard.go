@@ -198,6 +198,8 @@ func operationResponses(items []any) []dto.OperationResponse {
 			operations = append(operations, operation)
 		case dto.OperationResponseTransfer:
 			operations = append(operations, operation.OperationResponse)
+		case dto.OperationResponseReservation:
+			operations = append(operations, operation.OperationResponse)
 		}
 	}
 	return operations
