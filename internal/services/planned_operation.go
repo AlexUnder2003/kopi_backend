@@ -213,7 +213,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			continue
 		}
 
-		balances[op.Account.ID] = balance.Sub(op.Amount)
+		balances[op.Account.ID] = balance.Add(signed(op.Type, op.Amount))
 
 		operations = append(operations, models.Operation{
 			Name:           op.Name,
