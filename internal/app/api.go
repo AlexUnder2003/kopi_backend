@@ -47,9 +47,10 @@ func NewApp() *App {
 	accountService := services.NewAccountService(database, cfg, sugaredLogger)
 	categoryService := services.NewCategoryService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
-	operationService := services.NewOperationService(database, accountService, budgetService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
-	dashboardService := services.NewDashboardService(cfg, accountService, operationService, budgetService, plannedOperationService)
+	operationService := services.NewOperationService(database, accountService, budgetService, plannedOperationService, sugaredLogger)
+	freeBalanceService := services.NewFreeBalanceService(cfg, accountService, budgetService, plannedOperationService)
+	dashboardService := services.NewDashboardService(operationService, freeBalanceService, plannedOperationService)
 
 	hs := []routes.Handler{
 		handlers.NewUserHandler(userService),

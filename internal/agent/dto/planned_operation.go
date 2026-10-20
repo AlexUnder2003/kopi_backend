@@ -36,7 +36,6 @@ type ListPlannedOperationsArgs struct {
 type CreatePlannedOperationArgs struct {
 	Name         string `json:"name" jsonschema:"Short name, for example rent."`
 	Amount       string `json:"amount" jsonschema:"Positive decimal amount."`
-	Balance      string `json:"balance,omitempty" jsonschema:"Optional non-negative reserved balance. Defaults to 0."`
 	Type         string `json:"type" jsonschema:"income, expense, or reservation."`
 	AccountID    string `json:"account_id" jsonschema:"Account UUID from list_accounts."`
 	CategoryID   string `json:"category_id" jsonschema:"Category UUID from list_categories."`
@@ -56,7 +55,6 @@ func (o *CreatePlannedOperationArgs) Model() (*appdto.PlannedOperationPost, erro
 		Name:         p.requiredString(o.Name, "name"),
 		AccountID:    p.requiredUUID(o.AccountID, "account_id"),
 		Amount:       p.requiredAmount(o.Amount),
-		Balance:      p.optionalBalance(o.Balance),
 		Type:         p.requiredOperationType(o.Type, false),
 		IntervalType: intervalType,
 		Interval:     o.Interval,
@@ -77,7 +75,6 @@ type UpdatePlannedOperationArgs struct {
 	ID           string `json:"id" jsonschema:"Planned operation UUID from list_planned_operations."`
 	Name         string `json:"name,omitempty" jsonschema:"New name. Omit to keep the current name."`
 	Amount       string `json:"amount,omitempty" jsonschema:"New positive decimal amount. Omit to keep the current amount."`
-	Balance      string `json:"balance,omitempty" jsonschema:"New non-negative reserved balance. Omit to keep the current balance."`
 	Type         string `json:"type,omitempty" jsonschema:"income, expense, or reservation. Omit to keep the current type."`
 	AccountID    string `json:"account_id,omitempty" jsonschema:"New account UUID. Omit to keep the current account."`
 	CategoryID   string `json:"category_id,omitempty" jsonschema:"New category UUID. Omit to keep the current category."`
@@ -98,7 +95,6 @@ func (o *UpdatePlannedOperationArgs) Model() (uuid.UUID, *appdto.PlannedOperatio
 		Name:         p.string(o.Name),
 		AccountID:    p.optionalUUID(o.AccountID, "account_id"),
 		Amount:       p.optionalAmount(o.Amount),
-		Balance:      p.optionalBalance(o.Balance),
 		Type:         p.optionalOperationType(o.Type, false),
 		IntervalType: intervalType,
 		Interval:     o.Interval,

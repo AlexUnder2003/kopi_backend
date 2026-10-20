@@ -49,13 +49,14 @@ func (h *OperationHandler) Create(c *echo.Context) error {
 	}
 
 	resp, err := h.operationService.Create(c.Request().Context(), userID, &models.Operation{
-		Name:           req.Name,
-		Amount:         req.Amount,
-		Type:           req.Type,
-		AccountID:      req.AccountID,
-		FromAccountID:  req.FromAccountID,
-		CategoryID:     req.CategoryID,
-		OccurrenceDate: req.OccurrenceDate,
+		Name:               req.Name,
+		Amount:             req.Amount,
+		Type:               req.Type,
+		AccountID:          req.AccountID,
+		FromAccountID:      req.FromAccountID,
+		CategoryID:         req.CategoryID,
+		PlannedOperationID: req.PlannedOperationID,
+		OccurrenceDate:     req.OccurrenceDate,
 	})
 	if err != nil {
 		return mapAppError(err)

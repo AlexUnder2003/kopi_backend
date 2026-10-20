@@ -171,11 +171,11 @@ func (r *BudgetRepository) GetAlreadySpent(ctx context.Context, userID uuid.UUID
 		WHERE a.user_id = $1
 			AND o.category_id = ANY($2::uuid[])
 			AND o.type = 'expense'
-			AND o.occurrence_date >= $3::date
-			AND o.occurrence_date <= $4::date`
+			AND o.occurrence_date >= $3
+			AND o.occurrence_date <= $4`
 
 	var amount decimal.Decimal
-	if err := r.db.QueryRowContext(ctx, q, userID, categoryIDs).Scan(&amount); err != nil {
+	if err := r.db.QueryRowContext(ctx, q, userID, categoryIDs, startDate, endDate).Scan(&amount); err != nil {
 		return decimal.Zero, err
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/georgysavva/scany/v2/sqlscan"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 const plannedOperationSelectColumns = `
@@ -190,6 +191,22 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 	return &resp, nil
 }
 
+func (r *PlannedOperationRepository) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (decimal.Decimal, error) {
+	const q = `
+		SELECT COALESCE(SUM(p.balance), 0)
+		FROM planned_operations p
+		JOIN accounts a ON a.id = p.account_id
+		WHERE p.balance > 0
+			AND p.next_run_at > $1
+			AND a.user_id = $2
+	`
+	var balance decimal.Decimal
+	if err := r.db.QueryRowContext(ctx, q, nextRunAt, userID).Scan(&balance); err != nil {
+		return decimal.Zero, err
+	}
+	return balance, nil
+}
+
 func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time, tx *sql.Tx) ([]dto.PlannedOperationDueResponse, error) {
 	const q = `
 		SELECT ` + plannedOperationSelectColumns + `,
@@ -252,6 +269,19 @@ func (r *PlannedOperationRepository) GetNearestIncomeDate(
 		return nil, err
 	}
 	return &nextRunAt, nil
+}
+
+func (r *PlannedOperationRepository) UpdateBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	const q = `
+		UPDATE planned_operations
+		SET balance = balance + $2
+		WHERE id = $1`
+
+	_, err := DBorTx(r.db, tx).ExecContext(ctx, q, id, delta)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *PlannedOperationRepository) Delete(ctx context.Context, id uuid.UUID) error {

@@ -18,20 +18,22 @@ import (
 const errMsgOperationNotFound = "not_found_operation"
 
 type OperationService struct {
-	db             *sql.DB
-	operationRepo  *repositories.OperationRepository
-	accountService *AccountService
-	budgetService  *BudgetService
-	logger         *zap.SugaredLogger
+	db                      *sql.DB
+	operationRepo           *repositories.OperationRepository
+	accountService          *AccountService
+	budgetService           *BudgetService
+	plannedOperationService *PlannedOperationService
+	logger                  *zap.SugaredLogger
 }
 
-func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, logger *zap.SugaredLogger) *OperationService {
+func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, plannedOperationService *PlannedOperationService, logger *zap.SugaredLogger) *OperationService {
 	return &OperationService{
-		db:             db,
-		operationRepo:  repositories.NewOperationRepository(db),
-		accountService: accountService,
-		budgetService:  budgetService,
-		logger:         logger,
+		db:                      db,
+		operationRepo:           repositories.NewOperationRepository(db),
+		accountService:          accountService,
+		budgetService:           budgetService,
+		plannedOperationService: plannedOperationService,
+		logger:                  logger,
 	}
 }
 
@@ -63,6 +65,22 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 		if account.Balance.LessThan(operation.Amount) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
+	case models.OperationTypeReservation:
+		plannedOperation, err := s.plannedOperationService.GetByID(ctx, operation.PlannedOperationID, userID)
+		if err != nil {
+			return nil, err
+		}
+
+		accountPlannedOperation, err := s.accountService.GetByID(ctx, plannedOperation.Account.ID, userID)
+		if err != nil {
+			return nil, err
+		}
+
+		if accountPlannedOperation.Balance.LessThan(operation.Amount) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
+
+		operation.AccountID = accountPlannedOperation.ID
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -78,17 +96,7 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 
-	if err := s.applyEffects(
-		ctx,
-		tx,
-		operation.Type,
-		operation.AccountID,
-		operation.FromAccountID,
-		operation.CategoryID,
-		userID,
-		operation.Amount,
-		account.Currency,
-	); err != nil {
+	if err := s.applyEffects(ctx, tx, userID, operation, account.Currency); err != nil {
 		return nil, err
 	}
 
@@ -174,17 +182,15 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 	}
 
 	if !operation.Amount.IsZero() {
-		if err := s.applyEffects(
-			ctx,
-			tx,
-			existing.Type,
-			existing.Account.ID,
-			existing.FromAccount.ID,
-			existing.Category.ID,
-			userID,
-			operation.Amount.Sub(existing.Amount),
-			account.Currency,
-		); err != nil {
+		effect := &models.Operation{
+			Type:               existing.Type,
+			AccountID:          existing.Account.ID,
+			FromAccountID:      existing.FromAccount.ID,
+			CategoryID:         existing.Category.ID,
+			PlannedOperationID: existing.PlannedOperation.ID,
+			Amount:             operation.Amount.Sub(existing.Amount),
+		}
+		if err := s.applyEffects(ctx, tx, userID, effect, account.Currency); err != nil {
 			return nil, err
 		}
 	}
@@ -220,17 +226,15 @@ func (s *OperationService) Delete(ctx context.Context, id, userID uuid.UUID) err
 		return apperrors.Internal(errInternalServerError)
 	}
 
-	if err := s.applyEffects(
-		ctx,
-		tx,
-		operation.Type,
-		operation.Account.ID,
-		operation.FromAccount.ID,
-		operation.Category.ID,
-		userID,
-		operation.Amount.Neg(),
-		account.Currency,
-	); err != nil {
+	effect := &models.Operation{
+		Type:               operation.Type,
+		AccountID:          operation.Account.ID,
+		FromAccountID:      operation.FromAccount.ID,
+		CategoryID:         operation.Category.ID,
+		PlannedOperationID: operation.PlannedOperation.ID,
+		Amount:             operation.Amount.Neg(),
+	}
+	if err := s.applyEffects(ctx, tx, userID, effect, account.Currency); err != nil {
 		return err
 	}
 
@@ -257,31 +261,34 @@ func (s *OperationService) get(ctx context.Context, id, userID uuid.UUID) (*dto.
 func (s *OperationService) applyEffects(
 	ctx context.Context,
 	tx *sql.Tx,
-	opType models.OperationType,
-	accountID, fromAccountID, categoryID, userID uuid.UUID,
-	amount decimal.Decimal,
+	userID uuid.UUID,
+	op *models.Operation,
 	currency string,
 ) error {
-	budgetID, err := s.budgetService.GetByCategoryID(ctx, userID, categoryID, currency, tx)
+	budgetID, err := s.budgetService.GetByCategoryID(ctx, userID, op.CategoryID, currency, tx)
 	if err != nil {
 		return err
 	}
 
-	switch opType {
+	switch op.Type {
 	case models.OperationTypeTransfer:
-		if err := s.accountService.UpdateBalance(ctx, accountID, amount, tx); err != nil {
+		if err := s.accountService.UpdateBalance(ctx, op.AccountID, op.Amount, tx); err != nil {
 			return err
 		}
-		if err := s.accountService.UpdateBalance(ctx, fromAccountID, amount.Neg(), tx); err != nil {
+		if err := s.accountService.UpdateBalance(ctx, op.FromAccountID, op.Amount.Neg(), tx); err != nil {
+			return err
+		}
+	case models.OperationTypeReservation:
+		if err := s.plannedOperationService.UpdateBalance(ctx, op.PlannedOperationID, op.Amount, tx); err != nil {
 			return err
 		}
 	default:
-		if err := s.accountService.UpdateBalance(ctx, accountID, signed(opType, amount), tx); err != nil {
+		if err := s.accountService.UpdateBalance(ctx, op.AccountID, signed(op.Type, op.Amount), tx); err != nil {
 			return err
 		}
 
-		if opType == models.OperationTypeExpense && budgetID != uuid.Nil {
-			if err := s.budgetService.UpdateBalance(ctx, budgetID, signed(opType, amount), tx); err != nil {
+		if op.Type == models.OperationTypeExpense && budgetID != uuid.Nil {
+			if err := s.budgetService.UpdateBalance(ctx, budgetID, signed(op.Type, op.Amount), tx); err != nil {
 				return err
 			}
 		}

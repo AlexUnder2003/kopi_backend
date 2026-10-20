@@ -153,6 +153,14 @@ func (s *PlannedOperationService) Update(ctx context.Context, id, userID uuid.UU
 	return updated, nil
 }
 
+func (s *PlannedOperationService) UpdateBalance(ctx context.Context, id uuid.UUID, delta decimal.Decimal, tx *sql.Tx) error {
+	if err := s.plannedOperationRepo.UpdateBalance(ctx, id, delta, tx); err != nil {
+		s.logger.Errorw("failed to update planned operation balance", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+	return nil
+}
+
 func (s *PlannedOperationService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if _, err := s.GetByID(ctx, id, userID); err != nil {
 		return err
@@ -186,19 +194,26 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 
 	operations, accountUpdates, budgetUpdates, updatedOps := newPlannedExecution(len(ops))
 
-	balances, err := s.getBalances(ctx, ops)
+	accounts, err := s.accountRepo.GetByIDs(ctx, ops)
 	if err != nil {
-		return err
+		s.logger.Errorw("failed to get accounts", "error", err)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	balances := make(map[uuid.UUID]decimal.Decimal, len(accounts))
+	for _, account := range accounts {
+		balances[account.ID] = account.Balance
 	}
 
 	for _, op := range ops {
 		balance := balances[op.Account.ID]
+
 		if op.Type == models.OperationTypeExpense && balance.LessThan(op.Amount) {
 			s.logger.Warnw("skip planned operation, insufficient balance", "id", op.ID, "account_id", op.Account.ID)
 			continue
 		}
 
-		balances[op.Account.ID] = balance.Add(signed(op.Type, op.Amount))
+		balances[op.Account.ID] = balance.Sub(op.Amount)
 
 		operations = append(operations, models.Operation{
 			Name:           op.Name,
@@ -232,6 +247,7 @@ func (s *PlannedOperationService) Execute(ctx context.Context) error {
 			updatedOps = append(updatedOps, models.PlannedOperation{
 				ID:        op.ID,
 				NextRunAt: nextRunAt(base, *op.IntervalType, existingInterval(op.Interval)),
+				Balance:   decimal.Zero,
 			})
 		} else {
 			updatedOps = append(updatedOps, models.PlannedOperation{
@@ -334,16 +350,11 @@ func (s *PlannedOperationService) GetNearestExpense(ctx context.Context, userID 
 	return nearest, nil
 }
 
-func (s *PlannedOperationService) getBalances(ctx context.Context, ops []dto.PlannedOperationDueResponse) (map[uuid.UUID]decimal.Decimal, error) {
-	accounts, err := s.accountRepo.GetByIDs(ctx, ops)
+func (s *PlannedOperationService) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (decimal.Decimal, error) {
+	balance, err := s.plannedOperationRepo.GetBalance(ctx, nextRunAt, userID)
 	if err != nil {
-		s.logger.Errorw("failed to get accounts", "error", err)
-		return nil, apperrors.Internal(errInternalServerError)
+		s.logger.Errorw("failed to get planned operation balance", "error", err)
+		return decimal.Zero, apperrors.Internal(errInternalServerError)
 	}
-
-	balances := make(map[uuid.UUID]decimal.Decimal, len(accounts))
-	for _, account := range accounts {
-		balances[account.ID] = account.Balance
-	}
-	return balances, nil
+	return balance, nil
 }

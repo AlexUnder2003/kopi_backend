@@ -41,8 +41,8 @@ func NewAgent() *Agent {
 	accountService := services.NewAccountService(database, cfg, sugaredLogger)
 	categoryService := services.NewCategoryService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
-	operationService := services.NewOperationService(database, accountService, budgetService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
+	operationService := services.NewOperationService(database, accountService, budgetService, plannedOperationService, sugaredLogger)
 	subscriptionService := services.NewSubscriptionService(database, sugaredLogger)
 
 	toolset, err := agenttools.Collect(accountService, categoryService, operationService, plannedOperationService)

@@ -14,7 +14,6 @@ type PlannedOperationPost struct {
 	Name         string               `json:"name"`
 	AccountID    uuid.UUID            `json:"account_id"`
 	Amount       decimal.Decimal      `json:"amount"`
-	Balance      decimal.Decimal      `json:"balance,omitempty"`
 	Type         models.OperationType `json:"type"`
 	IntervalType models.IntervalType  `json:"interval_type"`
 	Interval     int                  `json:"interval,omitempty"`
@@ -34,9 +33,6 @@ func (r *PlannedOperationPost) Validate() error {
 	}
 	if !r.Amount.IsPositive() {
 		return errors.New("amount")
-	}
-	if r.Balance.IsNegative() {
-		return errors.New("balance")
 	}
 	if !validOperationType(r.Type) {
 		return errors.New("type")
@@ -63,7 +59,6 @@ type PlannedOperationUpdate struct {
 	Name         string               `json:"name,omitempty"`
 	AccountID    uuid.UUID            `json:"account_id,omitempty"`
 	Amount       decimal.Decimal      `json:"amount,omitempty"`
-	Balance      decimal.Decimal      `json:"balance,omitempty"`
 	Type         models.OperationType `json:"type,omitempty"`
 	IntervalType models.IntervalType  `json:"interval_type,omitempty"`
 	Interval     int                  `json:"interval,omitempty"`
@@ -84,9 +79,6 @@ func (r *PlannedOperationUpdate) Validate() error {
 	}
 	if r.Amount.IsNegative() {
 		return errors.New("amount")
-	}
-	if r.Balance.IsNegative() {
-		return errors.New("balance")
 	}
 	return nil
 }
