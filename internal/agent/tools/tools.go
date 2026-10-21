@@ -19,6 +19,7 @@ func Collect(
 		NewCategoriesToolkit(categories),
 		NewOperationsToolkit(operations),
 		NewPlannedOperationsToolkit(planned),
+		NewSystemToolkit(),
 	}
 
 	collected := make([]tool.Tool, 0, len(groups))

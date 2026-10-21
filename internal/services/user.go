@@ -36,6 +36,7 @@ type UserService struct {
 	db               *sql.DB
 	userRepo         *repositories.UserRepository
 	userOTPRepo      *repositories.UserOTPRepository
+	aiExecutionRepo  *repositories.AIExecutionRepository
 	userTokenRepo    *repositories.UserTokenRepository
 	subscriptionRepo *repositories.SubscriptionRepository
 	appConfig        *config.AppConfig
@@ -47,13 +48,16 @@ func NewUserService(db *sql.DB, appConfig *config.AppConfig, logger *zap.Sugared
 	userRepo := repositories.NewUserRepository(db)
 	userOTPRepo := repositories.NewUserOTPRepository(db)
 	userTokenRepo := repositories.NewUserTokenRepository(db)
+	aiExecutionRepo := repositories.NewAIExecutionRepository(db)
+	subscriptionRepo := repositories.NewSubscriptionRepository(db)
 	smtpService := NewSMTPService(appConfig, logger)
 	return &UserService{
 		db:               db,
 		userRepo:         userRepo,
 		userOTPRepo:      userOTPRepo,
 		userTokenRepo:    userTokenRepo,
-		subscriptionRepo: repositories.NewSubscriptionRepository(db),
+		subscriptionRepo: subscriptionRepo,
+		aiExecutionRepo:  aiExecutionRepo,
 		appConfig:        appConfig,
 		logger:           logger,
 		smtpService:      smtpService,
@@ -246,9 +250,18 @@ func (s *UserService) Create(ctx context.Context, user *models.User) (*dto.UserR
 		UserID:    created.ID,
 		Plan:      models.SubscriptionPlanFree,
 		StartDate: time.Now(),
-		EndDate:   time.Now().Add(time.Hour * 12 * 30),
+		EndDate:   time.Now().Add(time.Hour * 24 * 30),
 	}, tx); err != nil {
 		s.logger.Errorw("failed to create subscription", "error", err)
+		return nil, apperrors.Internal(errInternalServerError)
+	}
+
+	if _, err := s.aiExecutionRepo.Create(ctx, tx, &models.AIExecution{
+		UserID:      created.ID,
+		LeftQuota:   15,
+		NextResetAt: time.Now().Add(time.Hour * 24 * 30),
+	}); err != nil {
+		s.logger.Errorw("failed to create AI execution", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 

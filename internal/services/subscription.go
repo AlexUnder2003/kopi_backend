@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"KopiBackend/internal/apperrors"
 	"KopiBackend/internal/dto"
@@ -17,12 +18,14 @@ import (
 const errMsgSubscriptionNotFound = "not_found_subscription"
 
 type SubscriptionService struct {
+	db               *sql.DB
 	subscriptionRepo *repositories.SubscriptionRepository
 	logger           *zap.SugaredLogger
 }
 
 func NewSubscriptionService(db *sql.DB, logger *zap.SugaredLogger) *SubscriptionService {
 	return &SubscriptionService{
+		db:               db,
 		subscriptionRepo: repositories.NewSubscriptionRepository(db),
 		logger:           logger,
 	}
@@ -77,4 +80,45 @@ func (s *SubscriptionService) Update(ctx context.Context, userID uuid.UUID, subs
 		return nil, apperrors.Internal(errInternalServerError)
 	}
 	return updated, nil
+}
+
+func (s *SubscriptionService) ResetSubscription(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err)
+		return err
+	}
+	defer tx.Rollback()
+
+	subscriptions, err := s.subscriptionRepo.GetTodayExpiredSubscriptions(ctx, tx)
+	if err != nil {
+		s.logger.Errorw("failed to get today expired subscriptions", "error", err)
+		return err
+	}
+
+	updatedSubscriptions := make([]models.Subscription, len(subscriptions))
+
+	for i, subscription := range subscriptions {
+		updatedSubscriptions[i] = models.Subscription{
+			ID:        subscription.ID,
+			UserID:    subscription.UserID,
+			Plan:      models.SubscriptionPlanFree,
+			StartDate: time.Now(),
+			EndDate:   time.Now().Add(time.Hour * 24 * 30),
+		}
+	}
+
+	err = s.subscriptionRepo.BulkUpdate(ctx, updatedSubscriptions, tx)
+	if err != nil {
+		s.logger.Errorw("failed to bulk update subscriptions", "error", err)
+		return err
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err)
+		return err
+	}
+
+	return nil
 }

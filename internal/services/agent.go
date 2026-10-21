@@ -142,10 +142,14 @@ func (s *AgentService) consumeQuota(ctx context.Context, userID uuid.UUID) error
 	execution, err := s.aiExecutionRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		s.logger.Errorw("failed to get ai execution", "error", err, "user_id", userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
 		return apperrors.Internal(errInternalServerError)
 	}
 
 	execution.LeftQuota--
+
 	if execution.LeftQuota < 0 {
 		nextResetAt := time.Now().UTC().AddDate(0, 1, 0)
 

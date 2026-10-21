@@ -44,6 +44,8 @@ func NewApp() *App {
 	}
 
 	userService := services.NewUserService(database, cfg, sugaredLogger)
+	subscriptionService := services.NewSubscriptionService(database, sugaredLogger)
+	aiExecutionService := services.NewAIExecutionService(database, sugaredLogger)
 	accountService := services.NewAccountService(database, cfg, sugaredLogger)
 	categoryService := services.NewCategoryService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
@@ -67,7 +69,9 @@ func NewApp() *App {
 	plannedOperationsWorker := workers.NewPlannedOperationsWorker(plannedOperationService)
 	otpWorker := workers.NewOTPWorker(userService)
 	userTokenWorker := workers.NewUserTokenWorker(userService)
-	workers := []Worker{budgetWorker, plannedOperationsWorker, otpWorker, userTokenWorker}
+	subscriptionWorker := workers.NewSubscriptionWorker(subscriptionService)
+	aiExecutionWorker := workers.NewAIExecutionWorker(aiExecutionService)
+	workers := []Worker{budgetWorker, plannedOperationsWorker, otpWorker, userTokenWorker, subscriptionWorker, aiExecutionWorker}
 
 	return &App{config: cfg, router: router, db: database, workers: workers}
 }
