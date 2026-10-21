@@ -41,8 +41,8 @@ func NewBudgetService(db *sql.DB, categoryService *CategoryService, logger *zap.
 	}
 }
 
-func (s *BudgetService) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID, startDate time.Time, endDate time.Time) (decimal.Decimal, error) {
-	alreadySpent, err := s.budgetRepo.GetAlreadySpent(ctx, userID, categoryIDs, startDate, endDate)
+func (s *BudgetService) GetAlreadySpent(ctx context.Context, userID uuid.UUID, categoryIDs []uuid.UUID, startDate time.Time, endDate time.Time, currency string) (decimal.Decimal, error) {
+	alreadySpent, err := s.budgetRepo.GetAlreadySpent(ctx, userID, categoryIDs, startDate, endDate, currency)
 	if err != nil {
 		s.logger.Errorw("failed to get already spent", "error", err)
 		return decimal.Zero, apperrors.Internal(errInternalServerError)
@@ -71,7 +71,7 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 		budget.StartDate = s.CalculateStartDate()
 	}
 
-	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs, budget.StartDate, NextDate(budget.StartDate, budget.IntervalType, budget.Interval))
+	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs, budget.StartDate, NextDate(budget.StartDate, budget.IntervalType, budget.Interval), budget.Currency)
 	if err != nil {
 		s.logger.Errorw("failed to get already spent", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)

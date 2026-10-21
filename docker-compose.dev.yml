@@ -39,7 +39,7 @@ services:
     env_file:
       - .env
     environment:
-      ADDRESS: ":8080"
+      ADDRESS: ":8081"
     ports:
       - "8091:8080"
     depends_on:

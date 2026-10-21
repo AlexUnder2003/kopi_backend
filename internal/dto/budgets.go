@@ -87,6 +87,10 @@ type BudgetResponseList struct {
 	TotalCount int              `json:"total_count"`
 }
 
+type AlreadySpentResponse struct {
+	AlreadySpent decimal.Decimal `json:"already_spent"`
+}
+
 type BudgetResponse struct {
 	ID           uuid.UUID           `json:"id" db:"id"`
 	Name         string              `json:"name" db:"name"`
