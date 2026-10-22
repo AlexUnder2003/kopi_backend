@@ -42,10 +42,11 @@ func NewAgent() *Agent {
 	categoryService := services.NewCategoryService(database, sugaredLogger)
 	budgetService := services.NewBudgetService(database, categoryService, sugaredLogger)
 	plannedOperationService := services.NewPlannedOperationService(database, accountService, sugaredLogger)
-	operationService := services.NewOperationService(database, accountService, budgetService, plannedOperationService, sugaredLogger)
+	goalService := services.NewGoalService(database, sugaredLogger)
+	operationService := services.NewOperationService(database, accountService, budgetService, plannedOperationService, goalService, sugaredLogger)
 	subscriptionService := services.NewSubscriptionService(database, sugaredLogger)
 
-	toolset, err := agenttools.Collect(accountService, categoryService, operationService, plannedOperationService)
+	toolset, err := agenttools.Collect(accountService, categoryService, operationService, plannedOperationService, goalService)
 	if err != nil {
 		panic(err)
 	}

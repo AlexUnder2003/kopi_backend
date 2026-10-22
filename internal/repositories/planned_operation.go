@@ -191,20 +191,35 @@ func (r *PlannedOperationRepository) Update(ctx context.Context, op *models.Plan
 	return &resp, nil
 }
 
-func (r *PlannedOperationRepository) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (decimal.Decimal, error) {
+func (r *PlannedOperationRepository) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (map[string]decimal.Decimal, error) {
 	const q = `
-		SELECT COALESCE(SUM(p.balance), 0)
+		SELECT a.currency::text, COALESCE(SUM(p.balance), 0)
 		FROM planned_operations p
 		JOIN accounts a ON a.id = p.account_id
 		WHERE p.balance > 0
 			AND p.next_run_at > $1
 			AND a.user_id = $2
-	`
-	var balance decimal.Decimal
-	if err := r.db.QueryRowContext(ctx, q, nextRunAt, userID).Scan(&balance); err != nil {
-		return decimal.Zero, err
+		GROUP BY a.currency`
+
+	rows, err := r.db.QueryContext(ctx, q, nextRunAt, userID)
+	if err != nil {
+		return nil, err
 	}
-	return balance, nil
+	defer rows.Close()
+
+	balances := make(map[string]decimal.Decimal)
+	for rows.Next() {
+		var currency string
+		var amount decimal.Decimal
+		if err := rows.Scan(&currency, &amount); err != nil {
+			return nil, err
+		}
+		balances[currency] = amount
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return balances, nil
 }
 
 func (r *PlannedOperationRepository) GetByNextRunAt(ctx context.Context, nextRunAt time.Time, tx *sql.Tx) ([]dto.PlannedOperationDueResponse, error) {

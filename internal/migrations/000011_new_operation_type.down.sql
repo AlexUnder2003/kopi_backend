@@ -1,6 +1,9 @@
+DROP INDEX idx_operations_goal_id;
 DROP INDEX idx_operations_planned_operation_id;
 
-ALTER TABLE operations DROP COLUMN planned_operation_id;
+ALTER TABLE operations
+    DROP COLUMN goal_id,
+    DROP COLUMN planned_operation_id;
 
 ALTER TYPE operation_type RENAME TO operation_type_old;
 

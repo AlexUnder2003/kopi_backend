@@ -56,6 +56,7 @@ func (h *OperationHandler) Create(c *echo.Context) error {
 		FromAccountID:      req.FromAccountID,
 		CategoryID:         req.CategoryID,
 		PlannedOperationID: req.PlannedOperationID,
+		GoalID:             req.GoalID,
 		OccurrenceDate:     req.OccurrenceDate,
 	})
 	if err != nil {
@@ -172,6 +173,14 @@ func operationListParams(c *echo.Context) (repositories.OperationListParams, err
 			return params, echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
 		}
 		params.CategoryID = id
+	}
+
+	if value := c.QueryParam("goal_id"); value != "" {
+		id, err := uuid.Parse(value)
+		if err != nil {
+			return params, echo.NewHTTPError(http.StatusBadRequest, invalidUUID)
+		}
+		params.GoalID = id
 	}
 
 	if value := c.QueryParam("start_date"); value != "" {

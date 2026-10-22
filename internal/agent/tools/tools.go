@@ -11,6 +11,7 @@ func Collect(
 	categories *services.CategoryService,
 	operations *services.OperationService,
 	planned *services.PlannedOperationService,
+	goals *services.GoalService,
 ) ([]tool.Tool, error) {
 	groups := []interface {
 		Tools() ([]tool.Tool, error)
@@ -19,6 +20,7 @@ func Collect(
 		NewCategoriesToolkit(categories),
 		NewOperationsToolkit(operations),
 		NewPlannedOperationsToolkit(planned),
+		NewGoalsToolkit(goals),
 		NewSystemToolkit(),
 	}
 

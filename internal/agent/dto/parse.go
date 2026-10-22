@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	appdto "KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
 
 	"github.com/google/uuid"
@@ -79,6 +80,35 @@ func (p *parsed) requiredAmount(raw string) decimal.Decimal {
 		return decimal.Decimal{}
 	}
 	return p.optionalAmount(raw)
+}
+
+func (p *parsed) optionalNonNegative(raw, field string) decimal.Decimal {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || p.err != nil {
+		return decimal.Decimal{}
+	}
+	amount, err := decimal.NewFromString(raw)
+	if err != nil || amount.IsNegative() {
+		p.err = fmt.Errorf("%s must be a non-negative decimal", field)
+		return decimal.Decimal{}
+	}
+	return amount
+}
+
+func (p *parsed) requiredCurrency(raw string) string {
+	value := strings.ToUpper(p.string(raw))
+	if value == "" && p.err == nil {
+		p.err = errors.New("currency is required")
+		return ""
+	}
+	if p.err != nil {
+		return ""
+	}
+	if !appdto.ValidCurrency(value) {
+		p.err = errors.New("currency must be USD, EUR, RUB, KZT, or BYN")
+		return ""
+	}
+	return value
 }
 
 func (p *parsed) optionalTime(raw string) time.Time {

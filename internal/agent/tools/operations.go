@@ -80,7 +80,7 @@ func (t *OperationsToolkit) Tools() ([]tool.Tool, error) {
 func (t *OperationsToolkit) listTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
 		Name:        "list_operations",
-		Description: "Операции пользователя: доходы, расходы и переводы. Id нужен для изменения и удаления. Фильтры по имени, счёту, категории и датам необязательны.",
+		Description: "Операции пользователя: доходы, расходы, переводы и резервации. Id нужен для изменения и удаления. Фильтры по имени, счёту, категории, цели и датам необязательны.",
 	}, func(ctx adkagent.Context, args agentdto.ListOperationsArgs) ([]agentdto.OperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
@@ -99,7 +99,7 @@ func (t *OperationsToolkit) listTool() (tool.Tool, error) {
 func (t *OperationsToolkit) createTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
 		Name:        "create_operation",
-		Description: "Создаёт доход, расход или перевод между счетами.",
+		Description: "Создаёт доход, расход, перевод или резервацию. Резервация откладывает деньги на цель: type=reservation и goal_id из list_goals. Валюта счёта должна совпадать с валютой цели.",
 	}, func(ctx adkagent.Context, args agentdto.CreateOperationArgs) (agentdto.OperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
@@ -127,7 +127,7 @@ func (t *OperationsToolkit) createTool() (tool.Tool, error) {
 func (t *OperationsToolkit) updateTool() (tool.Tool, error) {
 	return functiontool.New(functiontool.Config{
 		Name:        "update_operation",
-		Description: "Изменяет доход, расход или перевод. Передавай только поля, которые нужно поменять.",
+		Description: "Изменяет доход, расход, перевод или резервацию. Передавай только поля, которые нужно поменять.",
 	}, func(ctx adkagent.Context, args agentdto.UpdateOperationArgs) (agentdto.OperationItem, error) {
 		userID, err := userIDFrom(ctx)
 		if err != nil {
@@ -183,6 +183,10 @@ func listParams(args agentdto.ListOperationsArgs) (repositories.OperationListPar
 	if err != nil {
 		return repositories.OperationListParams{}, err
 	}
+	goalID, err := optionalUUID(args.GoalID, "goal_id")
+	if err != nil {
+		return repositories.OperationListParams{}, err
+	}
 	start, err := parseOptionalTime(args.StartDate)
 	if err != nil {
 		return repositories.OperationListParams{}, fmt.Errorf("start_date: %w", err)
@@ -199,6 +203,7 @@ func listParams(args agentdto.ListOperationsArgs) (repositories.OperationListPar
 		},
 		AccountID:  accountID,
 		CategoryID: categoryID,
+		GoalID:     goalID,
 		StartDate:  start,
 		EndDate:    end,
 	}, nil
@@ -220,6 +225,9 @@ func operationView(item any) (agentdto.OperationItem, bool) {
 		if op.PlannedOperationID != nil {
 			item.PlannedOperationID = op.PlannedOperationID.String()
 		}
+		if op.GoalID != nil {
+			item.GoalID = op.GoalID.String()
+		}
 		return item, true
 	case dto.OperationResponseTransfer:
 		view, _ := operationView(op.OperationResponse)
@@ -229,6 +237,9 @@ func operationView(item any) (agentdto.OperationItem, bool) {
 		view, _ := operationView(op.OperationResponse)
 		if op.PlannedOperation != nil {
 			view.PlannedOperationID = op.PlannedOperation.ID.String()
+		}
+		if op.Goal != nil {
+			view.GoalID = op.Goal.ID.String()
 		}
 		return view, true
 	default:

@@ -24,6 +24,7 @@ type Operation struct {
 	FromAccountID      uuid.UUID       `db:"from_account_id"`
 	CategoryID         uuid.UUID       `db:"category_id"`
 	PlannedOperationID uuid.UUID       `db:"planned_operation_id"`
+	GoalID             uuid.UUID       `db:"goal_id"`
 	Amount             decimal.Decimal `db:"amount"`
 	OccurrenceDate     time.Time       `db:"occurrence_date"`
 }

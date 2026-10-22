@@ -44,6 +44,7 @@ type OperationPost struct {
 	FromAccountID      uuid.UUID            `json:"from_account_id,omitempty"`
 	CategoryID         uuid.UUID            `json:"category_id"`
 	PlannedOperationID uuid.UUID            `json:"planned_operation_id,omitempty"`
+	GoalID             uuid.UUID            `json:"goal_id,omitempty"`
 	OccurrenceDate     time.Time            `json:"occurrence_date"`
 }
 
@@ -68,18 +69,21 @@ type OperationResponse struct {
 	Account            AccountResponseShort `json:"account,omitempty" db:"account"`
 	Category           CategoryResponse     `json:"category" db:"category"`
 	PlannedOperationID *uuid.UUID           `json:"planned_operation_id,omitempty" db:"planned_operation_id"`
+	GoalID             *uuid.UUID           `json:"goal_id,omitempty" db:"goal_id"`
 	OccurrenceDate     time.Time            `json:"occurrence_date" db:"occurrence_date"`
 }
 
 type OperationResponseReservation struct {
 	OperationResponse
 	PlannedOperation *PlannedOperationResponseShort `json:"planned_operation,omitempty"`
+	Goal             *GoalResponse                  `json:"goal,omitempty"`
 }
 
 type OperationResponseTransfer struct {
 	OperationResponse
 	FromAccount      AccountResponseShort          `json:"from_account" db:"from_account"`
 	PlannedOperation PlannedOperationResponseShort `json:"-" db:"planned_operation"`
+	Goal             GoalResponse                  `json:"-" db:"goal"`
 }
 
 func (r OperationResponseTransfer) Response() any {
@@ -91,6 +95,9 @@ func (r OperationResponseTransfer) Response() any {
 		if r.PlannedOperation.ID != uuid.Nil {
 			planned := r.PlannedOperation
 			reservation.PlannedOperation = &planned
+		} else if r.Goal.ID != uuid.Nil {
+			goal := r.Goal
+			reservation.Goal = &goal
 		}
 		return reservation
 	default:

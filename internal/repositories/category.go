@@ -12,6 +12,7 @@ import (
 )
 
 const transferCategoryName = "Переводы"
+const reservationCategoryName = "Накопления"
 
 const categorySelectColumns = `
 		id,
@@ -86,6 +87,16 @@ func (r *CategoryRepository) GetTransferCategoryID(ctx context.Context) (uuid.UU
 
 	var resp uuid.UUID
 	if err := sqlscan.Get(ctx, r.db, &resp, q, transferCategoryName); err != nil {
+		return uuid.Nil, err
+	}
+	return resp, nil
+}
+
+func (r *CategoryRepository) GetReservationCategoryID(ctx context.Context) (uuid.UUID, error) {
+	const q = `SELECT id FROM categories WHERE name = $1`
+
+	var resp uuid.UUID
+	if err := sqlscan.Get(ctx, r.db, &resp, q, reservationCategoryName); err != nil {
 		return uuid.Nil, err
 	}
 	return resp, nil

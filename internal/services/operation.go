@@ -23,16 +23,18 @@ type OperationService struct {
 	accountService          *AccountService
 	budgetService           *BudgetService
 	plannedOperationService *PlannedOperationService
+	goalService             *GoalService
 	logger                  *zap.SugaredLogger
 }
 
-func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, plannedOperationService *PlannedOperationService, logger *zap.SugaredLogger) *OperationService {
+func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, plannedOperationService *PlannedOperationService, goalService *GoalService, logger *zap.SugaredLogger) *OperationService {
 	return &OperationService{
 		db:                      db,
 		operationRepo:           repositories.NewOperationRepository(db),
 		accountService:          accountService,
 		budgetService:           budgetService,
 		plannedOperationService: plannedOperationService,
+		goalService:             goalService,
 		logger:                  logger,
 	}
 }
@@ -66,21 +68,49 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
 	case models.OperationTypeReservation:
-		plannedOperation, err := s.plannedOperationService.GetByID(ctx, operation.PlannedOperationID, userID)
-		if err != nil {
-			return nil, err
+		if operation.GoalID == uuid.Nil && operation.PlannedOperationID == uuid.Nil {
+			return nil, apperrors.BadRequest("goal or planned operation is required")
+		} else if operation.GoalID != uuid.Nil && operation.PlannedOperationID != uuid.Nil {
+			return nil, apperrors.BadRequest("goal and planned operation cannot be set at the same time")
 		}
 
-		accountPlannedOperation, err := s.accountService.GetByID(ctx, plannedOperation.Account.ID, userID)
-		if err != nil {
-			return nil, err
+		if operation.GoalID != uuid.Nil {
+			goal, err := s.goalService.GetByID(ctx, operation.GoalID, userID)
+			if err != nil {
+				return nil, err
+			}
+
+			if account.Currency != goal.Currency {
+				return nil, apperrors.BadRequest("currency mismatch")
+			}
+
+			if account.Balance.LessThan(operation.Amount) {
+				return nil, apperrors.BadRequest("insufficient balance")
+			}
+
 		}
 
-		if accountPlannedOperation.Balance.LessThan(operation.Amount) {
-			return nil, apperrors.BadRequest("insufficient balance")
-		}
+		if operation.PlannedOperationID != uuid.Nil {
+			plannedOperation, err := s.plannedOperationService.GetByID(ctx, operation.PlannedOperationID, userID)
+			if err != nil {
+				return nil, err
+			}
 
-		operation.AccountID = accountPlannedOperation.ID
+			accountPlannedOperation, err := s.accountService.GetByID(ctx, plannedOperation.Account.ID, userID)
+			if err != nil {
+				return nil, err
+			}
+
+			if accountPlannedOperation.Currency != account.Currency {
+				return nil, apperrors.BadRequest("currency mismatch")
+			}
+
+			if accountPlannedOperation.Balance.LessThan(operation.Amount) {
+				return nil, apperrors.BadRequest("insufficient balance")
+			}
+
+			operation.AccountID = accountPlannedOperation.ID
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -163,6 +193,10 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 		if delta.IsPositive() && account.Balance.LessThan(delta) {
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
+	case models.OperationTypeReservation:
+		if delta.IsPositive() && account.Balance.LessThan(operation.Amount) {
+			return nil, apperrors.BadRequest("insufficient balance")
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -188,6 +222,7 @@ func (s *OperationService) Update(ctx context.Context, userID uuid.UUID, operati
 			FromAccountID:      existing.FromAccount.ID,
 			CategoryID:         existing.Category.ID,
 			PlannedOperationID: existing.PlannedOperation.ID,
+			GoalID:             existing.Goal.ID,
 			Amount:             operation.Amount.Sub(existing.Amount),
 		}
 		if err := s.applyEffects(ctx, tx, userID, effect, account.Currency); err != nil {
@@ -232,6 +267,7 @@ func (s *OperationService) Delete(ctx context.Context, id, userID uuid.UUID) err
 		FromAccountID:      operation.FromAccount.ID,
 		CategoryID:         operation.Category.ID,
 		PlannedOperationID: operation.PlannedOperation.ID,
+		GoalID:             operation.Goal.ID,
 		Amount:             operation.Amount.Neg(),
 	}
 	if err := s.applyEffects(ctx, tx, userID, effect, account.Currency); err != nil {
@@ -279,8 +315,18 @@ func (s *OperationService) applyEffects(
 			return err
 		}
 	case models.OperationTypeReservation:
-		if err := s.plannedOperationService.UpdateBalance(ctx, op.PlannedOperationID, op.Amount, tx); err != nil {
-			return err
+		if op.GoalID == uuid.Nil && op.PlannedOperationID == uuid.Nil {
+			return apperrors.BadRequest("goal or planned operation is required")
+		}
+		if op.GoalID != uuid.Nil {
+			if err := s.goalService.UpdateBalance(ctx, op.GoalID, op.Amount, tx); err != nil {
+				return err
+			}
+		}
+		if op.PlannedOperationID != uuid.Nil {
+			if err := s.plannedOperationService.UpdateBalance(ctx, op.PlannedOperationID, op.Amount, tx); err != nil {
+				return err
+			}
 		}
 	default:
 		if err := s.accountService.UpdateBalance(ctx, op.AccountID, signed(op.Type, op.Amount), tx); err != nil {

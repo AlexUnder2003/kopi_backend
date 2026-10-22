@@ -350,11 +350,11 @@ func (s *PlannedOperationService) GetNearestExpense(ctx context.Context, userID 
 	return nearest, nil
 }
 
-func (s *PlannedOperationService) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (decimal.Decimal, error) {
-	balance, err := s.plannedOperationRepo.GetBalance(ctx, nextRunAt, userID)
+func (s *PlannedOperationService) GetBalance(ctx context.Context, nextRunAt time.Time, userID uuid.UUID) (map[string]decimal.Decimal, error) {
+	balances, err := s.plannedOperationRepo.GetBalance(ctx, nextRunAt, userID)
 	if err != nil {
 		s.logger.Errorw("failed to get planned operation balance", "error", err)
-		return decimal.Zero, apperrors.Internal(errInternalServerError)
+		return nil, apperrors.Internal(errInternalServerError)
 	}
-	return balance, nil
+	return balances, nil
 }

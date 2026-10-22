@@ -49,6 +49,13 @@ func nullDecimal(d decimal.Decimal) any {
 	return d
 }
 
+func nullDecimalPtr(d *decimal.Decimal) any {
+	if d == nil {
+		return nil
+	}
+	return *d
+}
+
 func nullTime(t time.Time) any {
 	if t.IsZero() {
 		return nil

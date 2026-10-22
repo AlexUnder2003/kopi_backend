@@ -23,6 +23,7 @@ type FreeBalanceService struct {
 	accountService          *AccountService
 	budgetService           *BudgetService
 	plannedOperationService *PlannedOperationService
+	goalService             *GoalService
 }
 
 func NewFreeBalanceService(
@@ -30,12 +31,14 @@ func NewFreeBalanceService(
 	accountService *AccountService,
 	budgetService *BudgetService,
 	plannedOperationService *PlannedOperationService,
+	goalService *GoalService,
 ) *FreeBalanceService {
 	return &FreeBalanceService{
 		config:                  config,
 		accountService:          accountService,
 		budgetService:           budgetService,
 		plannedOperationService: plannedOperationService,
+		goalService:             goalService,
 	}
 }
 
@@ -45,11 +48,12 @@ type freeBalancePeriod struct {
 }
 
 type freeBalanceData struct {
-	plannedBalance    decimal.Decimal
+	plannedBalances   map[string]decimal.Decimal
 	accounts          dto.AccountResponseList
 	budgets           []dto.BudgetResponse
 	plannedOperations []dto.PlannedOperationResponse
 	currencyRates     map[string]decimal.Decimal
+	goals             []dto.GoalResponse
 }
 
 type freeBalanceResult struct {
@@ -102,7 +106,7 @@ func (s *FreeBalanceService) Calculate(
 		return freeBalanceResult{}, err
 	}
 
-	plannedReserve, err := calculatePlannedReserve(data.plannedBalance, data.plannedOperations, converter)
+	plannedReserve, err := calculatePlannedReserve(data.plannedBalances, data.plannedOperations, converter)
 	if err != nil {
 		return freeBalanceResult{}, err
 	}
@@ -112,12 +116,18 @@ func (s *FreeBalanceService) Calculate(
 		return freeBalanceResult{}, err
 	}
 
+	goalReserve, err := calculateGoalReserve(data.goals, converter)
+	if err != nil {
+		return freeBalanceResult{}, err
+	}
+
 	return freeBalanceResult{
 		totalBalance: data.accounts.TotalBalance,
 		availableBalance: data.accounts.TotalBalance.
 			Sub(accountReserve).
 			Sub(plannedReserve).
-			Sub(budgetReserve),
+			Sub(budgetReserve).
+			Sub(goalReserve),
 		plannedExpenses: plannedReserve,
 		currencyRates:   data.currencyRates,
 	}, nil
@@ -133,9 +143,17 @@ func (s *FreeBalanceService) loadData(
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	group.Go(func() error {
-		balance, err := s.plannedOperationService.GetBalance(groupCtx, period.end, userID)
+		result, err := s.goalService.List(groupCtx, userID, repositories.ListParams{})
 		if err == nil {
-			data.plannedBalance = balance
+			data.goals = result.Goals
+		}
+		return err
+	})
+
+	group.Go(func() error {
+		balances, err := s.plannedOperationService.GetBalance(groupCtx, period.end, userID)
+		if err == nil {
+			data.plannedBalances = balances
 		}
 		return err
 	})
@@ -205,11 +223,18 @@ func calculateAccountReserve(
 }
 
 func calculatePlannedReserve(
-	plannedBalance decimal.Decimal,
+	plannedBalances map[string]decimal.Decimal,
 	operations []dto.PlannedOperationResponse,
 	converter currencyConverter,
 ) (decimal.Decimal, error) {
-	reserve := plannedBalance
+	var reserve decimal.Decimal
+	for currency, amount := range plannedBalances {
+		converted, err := converter.convert(amount, currency)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		reserve = reserve.Add(converted)
+	}
 
 	for _, operation := range operations {
 		if operation.Type != models.OperationTypeExpense {
@@ -252,6 +277,22 @@ func calculateBudgetReserve(
 			Div(decimal.NewFromInt(int64(daysLeft))).
 			Mul(decimal.NewFromInt(int64(daysToReserve)))
 		total = total.Add(reserve)
+	}
+	return total, nil
+}
+
+func calculateGoalReserve(
+	goals []dto.GoalResponse,
+	converter currencyConverter,
+) (decimal.Decimal, error) {
+	var total decimal.Decimal
+
+	for _, goal := range goals {
+		amount, err := converter.convert(goal.CurrentAmount, goal.Currency)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		total = total.Add(amount)
 	}
 	return total, nil
 }
