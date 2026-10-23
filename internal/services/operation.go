@@ -23,11 +23,20 @@ type OperationService struct {
 	accountService          *AccountService
 	budgetService           *BudgetService
 	plannedOperationService *PlannedOperationService
+	categoryService         *CategoryService
 	goalService             *GoalService
 	logger                  *zap.SugaredLogger
 }
 
-func NewOperationService(db *sql.DB, accountService *AccountService, budgetService *BudgetService, plannedOperationService *PlannedOperationService, goalService *GoalService, logger *zap.SugaredLogger) *OperationService {
+func NewOperationService(
+	db *sql.DB,
+	accountService *AccountService,
+	budgetService *BudgetService,
+	plannedOperationService *PlannedOperationService,
+	goalService *GoalService,
+	categoryService *CategoryService,
+	logger *zap.SugaredLogger,
+) *OperationService {
 	return &OperationService{
 		db:                      db,
 		operationRepo:           repositories.NewOperationRepository(db),
@@ -35,6 +44,7 @@ func NewOperationService(db *sql.DB, accountService *AccountService, budgetServi
 		budgetService:           budgetService,
 		plannedOperationService: plannedOperationService,
 		goalService:             goalService,
+		categoryService:         categoryService,
 		logger:                  logger,
 	}
 }
@@ -47,6 +57,12 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 
 	switch operation.Type {
 	case models.OperationTypeTransfer:
+		categoryID, err := s.categoryService.GetTransferCategoryID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.CategoryID = categoryID
+
 		if operation.FromAccountID == uuid.Nil {
 			return nil, apperrors.BadRequest("from account ID is required")
 		}
@@ -68,6 +84,12 @@ func (s *OperationService) Create(ctx context.Context, userID uuid.UUID, operati
 			return nil, apperrors.BadRequest("insufficient balance")
 		}
 	case models.OperationTypeReservation:
+		categoryID, err := s.categoryService.GetReservationCategoryID(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.CategoryID = categoryID
+
 		if operation.GoalID == uuid.Nil && operation.PlannedOperationID == uuid.Nil {
 			return nil, apperrors.BadRequest("goal or planned operation is required")
 		} else if operation.GoalID != uuid.Nil && operation.PlannedOperationID != uuid.Nil {

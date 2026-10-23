@@ -42,7 +42,7 @@ type OperationPost struct {
 	Type               models.OperationType `json:"type"`
 	AccountID          uuid.UUID            `json:"account_id,omitempty"`
 	FromAccountID      uuid.UUID            `json:"from_account_id,omitempty"`
-	CategoryID         uuid.UUID            `json:"category_id"`
+	CategoryID         uuid.UUID            `json:"category_id,omitempty"`
 	PlannedOperationID uuid.UUID            `json:"planned_operation_id,omitempty"`
 	GoalID             uuid.UUID            `json:"goal_id,omitempty"`
 	OccurrenceDate     time.Time            `json:"occurrence_date"`

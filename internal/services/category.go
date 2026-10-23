@@ -57,6 +57,30 @@ func (s *CategoryService) GetByID(ctx context.Context, id, userID uuid.UUID) (*d
 	return cat, nil
 }
 
+func (s *CategoryService) GetTransferCategoryID(ctx context.Context) (uuid.UUID, error) {
+	id, err := s.categoryRepo.GetTransferCategoryID(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, apperrors.NotFound(errMsgCategoryNotFound)
+		}
+		s.logger.Errorw("failed to get transfer category", "error", err)
+		return uuid.Nil, apperrors.Internal(errInternalServerError)
+	}
+	return id, nil
+}
+
+func (s *CategoryService) GetReservationCategoryID(ctx context.Context) (uuid.UUID, error) {
+	id, err := s.categoryRepo.GetReservationCategoryID(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return uuid.Nil, apperrors.NotFound(errMsgCategoryNotFound)
+		}
+		s.logger.Errorw("failed to get reservation category", "error", err)
+		return uuid.Nil, apperrors.Internal(errInternalServerError)
+	}
+	return id, nil
+}
+
 func (s *CategoryService) List(ctx context.Context, userID uuid.UUID, params repositories.ListParams) (*dto.CategoryResponseList, error) {
 	categories, total, err := s.categoryRepo.List(ctx, userID, params)
 	if err != nil {
