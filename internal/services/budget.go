@@ -10,6 +10,7 @@ import (
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
 	"KopiBackend/internal/repositories"
+	"KopiBackend/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -68,7 +69,7 @@ func (s *BudgetService) Create(ctx context.Context, userID uuid.UUID, budget *dt
 	}
 
 	if budget.IntervalType != models.IntervalTypeCustom {
-		budget.StartDate = s.CalculateStartDate()
+		budget.StartDate = utils.StartOfMonth(time.Now())
 	}
 
 	alreadySpent, err := s.GetAlreadySpent(ctx, userID, budget.CategoryIDs, budget.StartDate, NextDate(budget.StartDate, budget.IntervalType, budget.Interval), budget.Currency)
@@ -168,7 +169,7 @@ func (s *BudgetService) Update(ctx context.Context, id, userID uuid.UUID, budget
 		startDate := effectiveTime(budget.StartDate, existingBudget.StartDate)
 
 		if intervalType != models.IntervalTypeCustom {
-			startDate = s.CalculateStartDate()
+			startDate = utils.StartOfMonth(time.Now())
 		}
 
 		budgetModel.IntervalType = intervalType
@@ -270,11 +271,4 @@ func existingInterval(interval *int) int {
 		return 0
 	}
 	return *interval
-}
-
-func (s *BudgetService) CalculateStartDate() time.Time {
-	now := time.Now()
-	firstDayOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-
-	return firstDayOfMonth
 }

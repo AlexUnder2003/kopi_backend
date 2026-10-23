@@ -11,7 +11,6 @@ import (
 	"KopiBackend/internal/apperrors"
 	"KopiBackend/internal/config"
 	"KopiBackend/internal/dto"
-	"KopiBackend/internal/models"
 	"KopiBackend/internal/repositories"
 
 	"github.com/google/uuid"
@@ -25,12 +24,12 @@ import (
 
 const (
 	agentAppName             = "kopi"
-	errMsgForbidden          = "agent_forbidden"
 	errMsgAgentQuotaExceeded = "agent_quota_exceeded"
 	defaultAIExecutionQuota  = 15
 )
 
 type AgentService struct {
+	db                  *sql.DB
 	runner              *runner.Runner
 	subscriptionService *SubscriptionService
 	aiExecutionRepo     *repositories.AIExecutionRepository
@@ -62,6 +61,7 @@ func NewAgentService(ctx context.Context, db *sql.DB, cfg config.AgentConfig, lo
 	}
 
 	return &AgentService{
+		db:                  db,
 		runner:              adkRunner,
 		subscriptionService: subscriptionService,
 		aiExecutionRepo:     repositories.NewAIExecutionRepository(db),
@@ -122,7 +122,7 @@ func (s *AgentService) Send(ctx context.Context, userID uuid.UUID, req *dto.Agen
 }
 
 func (s *AgentService) ensureQuota(ctx context.Context, userID uuid.UUID) error {
-	execution, err := s.aiExecutionRepo.GetByUserID(ctx, userID)
+	execution, err := s.aiExecutionRepo.GetByUserID(ctx, nil, userID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
@@ -139,7 +139,14 @@ func (s *AgentService) ensureQuota(ctx context.Context, userID uuid.UUID) error 
 }
 
 func (s *AgentService) consumeQuota(ctx context.Context, userID uuid.UUID) error {
-	execution, err := s.aiExecutionRepo.GetByUserID(ctx, userID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Errorw("failed to begin transaction", "error", err, "user_id", userID)
+		return apperrors.Internal(errInternalServerError)
+	}
+	defer tx.Rollback()
+
+	execution, err := s.aiExecutionRepo.GetByUserID(ctx, tx, userID)
 	if err != nil {
 		s.logger.Errorw("failed to get ai execution", "error", err, "user_id", userID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -150,25 +157,18 @@ func (s *AgentService) consumeQuota(ctx context.Context, userID uuid.UUID) error
 
 	execution.LeftQuota--
 
-	if execution.LeftQuota < 0 {
-		nextResetAt := time.Now().UTC().AddDate(0, 1, 0)
-
-		_, err = s.aiExecutionRepo.Update(ctx, &models.AIExecution{
-			UserID:      userID,
-			LeftQuota:   0,
-			NextResetAt: nextResetAt,
-		})
-
-		if err != nil {
-			s.logger.Errorw("failed to update ai execution", "error", err, "user_id", userID)
-			return apperrors.Internal(errInternalServerError)
-		}
-
-		return apperrors.Forbidden(errMsgAgentQuotaExceeded)
+	if execution.LeftQuota <= 0 {
+		execution.LeftQuota = 0
+		execution.NextResetAt = time.Now().UTC().AddDate(0, 1, 0)
 	}
 
-	if _, err := s.aiExecutionRepo.Update(ctx, execution); err != nil {
+	if _, err := s.aiExecutionRepo.Update(ctx, tx, execution); err != nil {
 		s.logger.Errorw("failed to update ai execution", "error", err, "user_id", userID)
+		return apperrors.Internal(errInternalServerError)
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Errorw("failed to commit transaction", "error", err, "user_id", userID)
 		return apperrors.Internal(errInternalServerError)
 	}
 

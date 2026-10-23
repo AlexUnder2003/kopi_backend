@@ -152,6 +152,9 @@ func (s *OperationService) List(ctx context.Context, userID uuid.UUID, params re
 		s.logger.Errorw("failed to list operations", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
+	if operations == nil {
+		operations = []dto.OperationResponseTransfer{}
+	}
 
 	response := make([]any, len(operations))
 	for i, operation := range operations {

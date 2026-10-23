@@ -10,6 +10,7 @@ import (
 	"KopiBackend/internal/dto"
 	"KopiBackend/internal/models"
 	"KopiBackend/internal/repositories"
+	"KopiBackend/internal/utils"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -68,12 +69,31 @@ type currencyConverter struct {
 	rates  map[string]decimal.Decimal
 }
 
-func (s *FreeBalanceService) GetPeriod(
+func (s *FreeBalanceService) CalculateFreeBalance(
+	ctx context.Context,
+	userID uuid.UUID,
+	currency string,
+	now time.Time,
+) (freeBalanceResult, freeBalancePeriod, error) {
+	period, err := s.getPeriod(ctx, userID, now)
+	if err != nil {
+		return freeBalanceResult{}, freeBalancePeriod{}, err
+	}
+
+	result, err := s.calculate(ctx, userID, currency, period, now)
+	if err != nil {
+		return freeBalanceResult{}, freeBalancePeriod{}, err
+	}
+
+	return result, period, nil
+}
+
+func (s *FreeBalanceService) getPeriod(
 	ctx context.Context,
 	userID uuid.UUID,
 	now time.Time,
 ) (freeBalancePeriod, error) {
-	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	start := utils.StartOfMonth(now)
 	end := start.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
 	nearestIncomeAt, err := s.plannedOperationService.GetNearestIncomeDate(ctx, userID, now)
@@ -87,7 +107,7 @@ func (s *FreeBalanceService) GetPeriod(
 	return freeBalancePeriod{start: start, end: end}, nil
 }
 
-func (s *FreeBalanceService) Calculate(
+func (s *FreeBalanceService) calculate(
 	ctx context.Context,
 	userID uuid.UUID,
 	currency string,

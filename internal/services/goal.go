@@ -30,14 +30,13 @@ func NewGoalService(db *sql.DB, logger *zap.SugaredLogger) *GoalService {
 }
 
 func (s *GoalService) Create(ctx context.Context, userID uuid.UUID, goal *dto.GoalPost) (*dto.GoalResponse, error) {
-	currentAmount := goal.CurrentAmount
 	created, err := s.goalRepo.Create(ctx, &models.Goal{
 		UserID:        userID,
 		Name:          goal.Name,
 		Currency:      models.CurrencyCode(goal.Currency),
 		Deadline:      goal.Deadline,
 		TargetAmount:  goal.TargetAmount,
-		CurrentAmount: &currentAmount,
+		CurrentAmount: &goal.CurrentAmount,
 	})
 	if err != nil {
 		s.logger.Errorw("failed to create goal", "error", err)
@@ -64,7 +63,6 @@ func (s *GoalService) List(ctx context.Context, userID uuid.UUID, params reposit
 		s.logger.Errorw("failed to list goals", "error", err)
 		return nil, apperrors.Internal(errInternalServerError)
 	}
-
 	if goals == nil {
 		goals = []dto.GoalResponse{}
 	}

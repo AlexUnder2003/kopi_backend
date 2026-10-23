@@ -26,14 +26,18 @@ func NewAIExecutionRepository(db *sql.DB) *AIExecutionRepository {
 	return &AIExecutionRepository{db: db}
 }
 
-func (r *AIExecutionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) (*models.AIExecution, error) {
-	const q = `
+func (r *AIExecutionRepository) GetByUserID(ctx context.Context, tx *sql.Tx, userID uuid.UUID) (*models.AIExecution, error) {
+	q := `
 		SELECT ` + aiExecutionSelectColumns + `
 		FROM ai_executions
 		WHERE user_id = $1`
+	if tx != nil {
+		q += `
+		FOR UPDATE`
+	}
 
 	var execution models.AIExecution
-	if err := sqlscan.Get(ctx, r.db, &execution, q, userID); err != nil {
+	if err := sqlscan.Get(ctx, DBorTx(r.db, tx), &execution, q, userID); err != nil {
 		return nil, err
 	}
 	return &execution, nil
@@ -55,7 +59,7 @@ func (r *AIExecutionRepository) Create(ctx context.Context, tx *sql.Tx, executio
 	return &created, nil
 }
 
-func (r *AIExecutionRepository) Update(ctx context.Context, execution *models.AIExecution) (*models.AIExecution, error) {
+func (r *AIExecutionRepository) Update(ctx context.Context, tx *sql.Tx, execution *models.AIExecution) (*models.AIExecution, error) {
 	const q = `
 		UPDATE ai_executions
 		SET left_quota = $2,
@@ -66,7 +70,7 @@ func (r *AIExecutionRepository) Update(ctx context.Context, execution *models.AI
 
 	var updated models.AIExecution
 	if err := sqlscan.Get(
-		ctx, r.db, &updated, q,
+		ctx, DBorTx(r.db, tx), &updated, q,
 		execution.ID, execution.LeftQuota, execution.NextResetAt, execution.UserID,
 	); err != nil {
 		return nil, err

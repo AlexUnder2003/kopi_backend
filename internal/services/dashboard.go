@@ -33,23 +33,14 @@ func NewDashboardService(
 
 func (s *DashboardService) GetDashboard(ctx context.Context, userID uuid.UUID, currency string) (*dto.Dashboard, error) {
 	now := time.Now()
-	period, err := s.freeBalanceService.GetPeriod(ctx, userID, now)
+	freeBalance, period, err := s.freeBalanceService.CalculateFreeBalance(ctx, userID, currency, now)
 	if err != nil {
 		return nil, err
 	}
 
-	var freeBalance freeBalanceResult
 	var operations *dto.OperationResponseList
 	var plannedOperations []dto.PlannedOperationResponse
 	group, groupCtx := errgroup.WithContext(ctx)
-
-	group.Go(func() error {
-		result, err := s.freeBalanceService.Calculate(groupCtx, userID, currency, period, now)
-		if err == nil {
-			freeBalance = result
-		}
-		return err
-	})
 
 	group.Go(func() error {
 		result, err := s.plannedOperationService.List(
